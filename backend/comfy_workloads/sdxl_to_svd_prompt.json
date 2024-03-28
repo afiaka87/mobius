@@ -1,0 +1,204 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 1111168152537804,
+      "steps": 20,
+      "cfg": 2.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 1,
+      "model": [
+        "14",
+        0
+      ],
+      "positive": [
+        "12",
+        0
+      ],
+      "negative": [
+        "12",
+        1
+      ],
+      "latent_image": [
+        "12",
+        2
+      ]
+    },
+    "class_type": "KSampler"
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "15",
+        2
+      ]
+    },
+    "class_type": "VAEDecode"
+  },
+  "12": {
+    "inputs": {
+      "width": 1024,
+      "height": 576,
+      "video_frames": 25,
+      "motion_bucket_id": 64,
+      "fps": 6,
+      "augmentation_level": 0,
+      "clip_vision": [
+        "15",
+        1
+      ],
+      "init_image": [
+        "20",
+        0
+      ],
+      "vae": [
+        "15",
+        2
+      ]
+    },
+    "class_type": "SVD_img2vid_Conditioning"
+  },
+  "14": {
+    "inputs": {
+      "min_cfg": 1,
+      "model": [
+        "15",
+        0
+      ]
+    },
+    "class_type": "VideoLinearCFGGuidance"
+  },
+  "15": {
+    "inputs": {
+      "ckpt_name": "SVD/svd.safetensors"
+    },
+    "class_type": "ImageOnlyCheckpointLoader"
+  },
+  "16": {
+    "inputs": {
+      "ckpt_name": "sd_xl_base_1.0_0.9vae.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple"
+  },
+  "17": {
+    "inputs": {
+      "seed": 940874014628832,
+      "steps": 20,
+      "cfg": 7,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "16",
+        0
+      ],
+      "positive": [
+        "18",
+        0
+      ],
+      "negative": [
+        "19",
+        0
+      ],
+      "latent_image": [
+        "22",
+        0
+      ]
+    },
+    "class_type": "KSampler"
+  },
+  "18": {
+    "inputs": {
+      "text": "saturn v rocket launch. shot of the rocket in the sky.",
+      "clip": [
+        "16",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode"
+  },
+  "19": {
+    "inputs": {
+      "text": "text, watermark",
+      "clip": [
+        "16",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode"
+  },
+  "20": {
+    "inputs": {
+      "samples": [
+        "17",
+        0
+      ],
+      "vae": [
+        "16",
+        2
+      ]
+    },
+    "class_type": "VAEDecode"
+  },
+  "21": {
+    "inputs": {
+      "images": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "PreviewImage"
+  },
+  "22": {
+    "inputs": {
+      "width": 1024,
+      "height": 576,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage"
+  },
+  "23": {
+    "inputs": {
+      "frame_rate": 12,
+      "loop_count": 0,
+      "filename_prefix": "svd_",
+      "format": "image/gif",
+      "pingpong": false,
+      "save_image": true,
+      "crf": 20,
+      "save_metadata": true,
+      "audio_file": "",
+      "videopreview": {
+        "hidden": false,
+        "paused": false,
+        "params": {
+          "filename": "AnimateDiff_00036.gif",
+          "subfolder": "svd",
+          "type": "output",
+          "format": "image/gif"
+        }
+      },
+      "images": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine"
+  },
+  "24": {
+    "inputs": {
+      "ckpt_name": "film_net_fp32.pt",
+      "clear_cache_after_n_frames": 10,
+      "multiplier": 2,
+      "frames": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "FILM VFI"
+  }
+}

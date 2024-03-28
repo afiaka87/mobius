@@ -1,0 +1,137 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 1106252458567036,
+      "steps": 25,
+      "cfg": 3,
+      "sampler_name": "uni_pc",
+      "scheduler": "karras",
+      "denoise": 1,
+      "model": [
+        "14",
+        0
+      ],
+      "positive": [
+        "12",
+        0
+      ],
+      "negative": [
+        "12",
+        1
+      ],
+      "latent_image": [
+        "12",
+        2
+      ]
+    },
+    "class_type": "KSampler"
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "15",
+        2
+      ]
+    },
+    "class_type": "VAEDecode"
+  },
+  "12": {
+    "inputs": {
+      "width": 576,
+      "height": 576,
+      "video_frames": 20,
+      "motion_bucket_id": 60,
+      "fps": 6,
+      "augmentation_level": 0,
+      "clip_vision": [
+        "15",
+        1
+      ],
+      "init_image": [
+        "25",
+        0
+      ],
+      "vae": [
+        "15",
+        2
+      ]
+    },
+    "class_type": "SVD_img2vid_Conditioning"
+  },
+  "14": {
+    "inputs": {
+      "min_cfg": 1,
+      "model": [
+        "15",
+        0
+      ]
+    },
+    "class_type": "VideoLinearCFGGuidance"
+  },
+  "15": {
+    "inputs": {
+      "ckpt_name": "SVD/svd.safetensors"
+    },
+    "class_type": "ImageOnlyCheckpointLoader"
+  },
+  "21": {
+    "inputs": {
+      "images": [
+        "25",
+        0
+      ]
+    },
+    "class_type": "PreviewImage"
+  },
+  "23": {
+    "inputs": {
+      "frame_rate": 23,
+      "loop_count": 0,
+      "filename_prefix": "AnimateDiff",
+      "format": "video/h264-mp4",
+      "pingpong": false,
+      "save_image": true,
+      "crf": 20,
+      "save_metadata": true,
+      "audio_file": "",
+      "videopreview": {
+        "hidden": false,
+        "paused": false,
+        "params": {
+          "filename": "AnimateDiff_00053.mp4",
+          "subfolder": "",
+          "type": "output",
+          "format": "video/h264-mp4"
+        }
+      },
+      "images": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine"
+  },
+  "24": {
+    "inputs": {
+      "ckpt_name": "film_net_fp32.pt",
+      "clear_cache_after_n_frames": 10,
+      "multiplier": 4,
+      "frames": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "FILM VFI"
+  },
+  "25": {
+    "inputs": {
+      "image": "17032128408550725.jpg",
+      "upload": "image"
+    },
+    "class_type": "LoadImage"
+  }
+}
