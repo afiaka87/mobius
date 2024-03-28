@@ -5,3 +5,4 @@ images/
 .envmidjprompts.csv
 .env
 midjprompts.csv
+*/__pycache__/
