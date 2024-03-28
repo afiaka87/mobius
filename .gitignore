@@ -2,3 +2,5 @@
 logs/
 .venv/
 .envmidjprompts.csv
+.env
+midjprompts.csv
