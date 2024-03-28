@@ -1,5 +1,6 @@
 .vscode/
 logs/
+images/
 .venv/
 .envmidjprompts.csv
 .env
