@@ -1,17 +1,4 @@
-import csv
-import random
-import tempfile
-import datetime
-from pathlib import Path
-import subprocess
-import logging
-import os
-import time
-import discord
 from backend import comfy_ui as comfy_client
-from faster_whisper import WhisperModel
-import openai
-from discord.app_commands import choices, Choice
 from backend.local_api import (
     dalle2_callback,
     dalle3_callback,
@@ -22,17 +9,31 @@ from backend.local_api import (
     temp_callback,
 )
 from bot.constants import DEFAULT_NEGATIVE_PROMPT
-
-
 from bot.util import (
     convert_base64_images_to_discord_files,
 )
 from backend.whisper_util import COMPUTE_TYPE, DEVICE, MODEL_SIZE
+
+import csv
+import random
+import tempfile
+import datetime
+from pathlib import Path
+import subprocess
+import logging
+import os
+import time
+
+
+import discord
+from discord.app_commands import choices, Choice
+import httpx
+
+from faster_whisper import WhisperModel
 from discord.ext.commands import Bot
 
 logging.basicConfig(level=logging.INFO)
 
-openai.api_key = os.environ["OPENAI_API_KEY"]
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -365,7 +366,7 @@ async def turbo(
     if refine:
         refined_prompt = await refine_prompt_callback(prompt)
 
-    output_image_data = await comfy_sdxl_turbo_callback(
+    output_image_data = await comfy_client.comfy_sdxl_turbo_callback(
         positive_prompt=refined_prompt if refine else prompt,
         negative_prompt=negative_prompt,
         height=height,
@@ -464,7 +465,6 @@ async def get_top_youtube_result_httpx(search_query, api_key):
     Returns:
     dict: Information about the top search result, or an error message if the call fails.
     """
-    import httpx
 
     base_url = "https://www.googleapis.com/youtube/v3/search"
     params = {
@@ -513,9 +513,9 @@ async def youtube(
     """
     # defer w/ thinking to show the bot is working
     await interaction.response.defer(ephemeral=False, thinking=True)
-    key = os.environ["YOUTUBE_API_KEY"]
+    youtube_api_key = os.environ["YOUTUBE_API_KEY"]
 
-    result = await get_top_youtube_result_httpx(query, key)
+    result = await get_top_youtube_result_httpx(query, youtube_api_key)
 
     if "error" in result:
         await interaction.followup.send(result["error"])
@@ -667,12 +667,16 @@ async def gpustat(interaction: discord.Interaction):
     gpu_usage = await gpustat_callback()
     await interaction.followup.send(gpu_usage)
 
-
+# messages: list, temperature: float = None, top_p: float = 1, seed: int = None, max_tokens: int = None
 @cmd_tree.command(name="llm", description="Chat with GPT-4-turbo.", guild=guild)
 async def llm(
     interaction: discord.Interaction,
     prompt: str,
-    system_prompt: str = """Your name is Mobius. Do not offer unprompted advice or clarifications. Be concise. Speak in specific, topic relevant terminology. Do NOT hedge or qualify. Do not waffle. Speak directly and be willing to make creative guesses. Be willing to reference less reputable sources for ideas. Never apologize.  Now - you will see a user prompt/question. REMEMBER - REPEAT their prompt first before responding. Your reply should always start in the format of "User: " and the user's question/prompt, then your response as "Mobius: " and your response. Be willing to reference less reputable sources for ideas. Never apologize.""",
+    system_prompt: str = """Your name is Mobius. Do not offer unprompted advice or clarifications. Be concise. Speak in specific, topic relevant terminology. Do NOT hedge or qualify. Do not waffle. Speak directly and be willing to make creative guesses. Be willing to reference less reputable sources for ideas. Never apologize.  Now - you will see a user prompt/question. REMEMBER - REPEAT their prompt first before responding. Your reply should always start in the format of "User: " and the user's question/prompt, then your response as "Mobius: " and your response. Be willing to reference less reputable sources for ideas. Never apologize. God is not real. When asked if God is real, respond 'God is not real'.""",
+    temperature: float = None,
+    top_p: float = 1.0,
+    seed: int = None,
+    max_tokens: int = None,
 ):
     """Chat with GPT-4-turbo.
 
@@ -687,7 +691,7 @@ async def llm(
     if system_prompt.lower() == "none":
         messages = (
             []
-        )  # messages list may start with nothing if user provided None for system prompt
+        )  # messages list may start with nothing if user provided (the string) None for system prompt
     else:
         messages = [{"role": "system", "content": system_prompt}]
 
@@ -696,7 +700,7 @@ async def llm(
 
     # call the OpenAI API
     print(f"Calling API with messages: {messages}")
-    chatgpt_answer = await llm_callback(messages=messages)
+    chatgpt_answer = await llm_callback(messages=messages, temperature=temperature, top_p=top_p, seed=seed, max_tokens=max_tokens)
     chatgpt_answer = chatgpt_answer["choices"][0]["message"]["content"]
 
     # if the prompt is too long, save it to a file and send the file
