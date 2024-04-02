@@ -1,5 +1,5 @@
 # mobius
-<img src="/logo.jpg" style="max-width:100px;">
+<img src="/logo.jpg" width="200" height="200" />
 
 A discord bot by/for Clay. Currently a work-in-progress. Not really meant for public consumption.
 
