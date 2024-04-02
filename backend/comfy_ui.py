@@ -74,7 +74,7 @@ async def get_images(ws, prompt):
                 if data['node'] is None and data['prompt_id'] == prompt_id:
                     break  #Execution is done
         else:
-            continue  #previews are binary data
+            continue  # previews are binary data
 
     history = get_history(prompt_id)[prompt_id]
     for o in history['outputs']:
