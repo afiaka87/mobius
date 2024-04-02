@@ -66,9 +66,20 @@ DEFAULT_LLM_SYSTEM_PROMPT = {
     "content": f"""Your name is Mobius. Do not offer unprompted advice or clarifications. Be concise. Speak in specific, topic relevant terminology. Do NOT hedge or qualify. Do not waffle. Speak directly and be willing to make creative guesses. Be willing to reference less reputable sources for ideas. Never apologize.  Now - you will see a user prompt/question. REMEMBER - REPEAT their prompt first before responding. Your reply should always start in the format of "User: " and the user's question/prompt, then your response as "Mobius: " and your response. Be willing to reference less reputable sources for ideas. Never apologize.""",
 }
 
-
-async def llm_callback(messages: list) -> dict:
+async def llm_callback(messages: list, temperature: float = None, top_p: float = 1, seed: int = None, max_tokens: int = None) -> dict:
     url = "https://api.openai.com/v1/chat/completions"
+
+    data_dict = {
+        "model": "gpt-4-0125-preview",  # TODO
+        "messages": messages,
+        "top_p": top_p,
+    }
+    if temperature is not None:
+        data_dict["temperature"] = temperature
+    if seed is not None:
+        data_dict["seed"] = seed
+    if max_tokens is not None:
+        data_dict["max_tokens"] = max_tokens
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(connect=5, read=None, write=5, pool=5)
     ) as httpx_client:
