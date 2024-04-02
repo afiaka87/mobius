@@ -34,7 +34,7 @@ bash run.sh
 
 - `/dream` - generate dream-like images
 - `/turbo` - generate turbo images
-- `/svd` - perform Singular Value Decomposition on an image
+- `/svd` - generate a video from text using SVD
 - `/transcribe` - transcribe a youtube video
 - `/youtube` - search youtube
 - `/temp` - get the temperature
