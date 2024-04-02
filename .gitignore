@@ -6,3 +6,6 @@ images/
 .env
 midjprompts.csv
 */__pycache__/
+scratch.opus
+content.txt
+test.png
