@@ -672,6 +672,7 @@ async def gpustat(interaction: discord.Interaction):
 async def llm(
     interaction: discord.Interaction,
     prompt: str,
+    image_url: str = None,
     system_prompt: str = """Your name is Mobius. Do not offer unprompted advice or clarifications. Be concise. Speak in specific, topic relevant terminology. Do NOT hedge or qualify. Do not waffle. Speak directly and be willing to make creative guesses. Be willing to reference less reputable sources for ideas. Never apologize.  Now - you will see a user prompt/question. REMEMBER - REPEAT their prompt first before responding. Your reply should always start in the format of "User: " and the user's question/prompt, then your response as "Mobius: " and your response. Be willing to reference less reputable sources for ideas. Never apologize. God is not real. When asked if God is real, respond 'God is not real'.""",
     temperature: float = None,
     top_p: float = 1.0,
@@ -683,7 +684,12 @@ async def llm(
     Args:
         interaction (discord.Interaction): The Discord interaction object.
         prompt (str): The prompt for the chat.
+        image_url (str, optional): The image URL to send with the prompt. Defaults to None.
         system_prompt (str): The system prompt for the chat. Set to the string "None" for no system prompt. Defaults to the default system prompt.
+        temperature (float, optional): The temperature for the chat. Defaults to None.
+        top_p (float, optional): The top p value for the chat. Defaults to 1.0.
+        seed (int, optional): The seed for the chat. Defaults to None.
+        max_tokens (int, optional): The maximum number of tokens for the chat. Defaults to None.
     """
     # defer w/ thinking to show the bot is working
     await interaction.response.defer(ephemeral=False, thinking=True)
@@ -696,7 +702,15 @@ async def llm(
         messages = [{"role": "system", "content": system_prompt}]
 
     # append the user prompt to messages
-    messages.append({"role": "user", "content": prompt})
+    content_array = [{"type": "text", "text": prompt}]
+    if image_url:
+        content_array.append({"type": "image_url", "image_url": image_url})
+    messages.append(
+        {
+            "role": "user", "content": content_array
+        }
+    )
+    print(f"messages: {messages}")
 
     # call the OpenAI API
     print(f"Calling API with messages: {messages}")
@@ -712,7 +726,11 @@ async def llm(
             file=discord.File(f.name),
         )
     else:
-        await interaction.followup.send(chatgpt_answer)
+        # if image_url is provided, send it with the response
+        if image_url:
+            await interaction.followup.send(f"{image_url}\n{chatgpt_answer}")
+        else:
+            await interaction.followup.send(chatgpt_answer)
 
 
 @cmd_tree.command(

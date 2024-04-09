@@ -70,7 +70,7 @@ async def llm_callback(messages: list, temperature: float = None, top_p: float =
     url = "https://api.openai.com/v1/chat/completions"
 
     data_dict = {
-        "model": "gpt-4-0125-preview",  # TODO
+        "model": "gpt-4-vision-preview",  # TODO
         "messages": messages,
         "top_p": top_p,
     }
@@ -86,10 +86,7 @@ async def llm_callback(messages: list, temperature: float = None, top_p: float =
         response = await httpx_client.post(
             url,
             headers=OPENAI_HEADERS,
-            json={
-                "model": "gpt-4-0125-preview",  # TODO
-                "messages": messages,
-            },
+            json=data_dict,
         )
         response.raise_for_status()
         return response.json()
