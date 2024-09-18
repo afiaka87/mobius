@@ -67,7 +67,7 @@ Description=Clays discord bot mobius.
 After=network.target
 
 [Service]
-ExecStart=/bin/bash -c '/home/change/me/mobius/.venv/bin/python /home/change/me/mobius/main.py'
+ExecStart=/home/change/me/mobius/.venv/bin/python /home/change/me/mobius/main.py
 
 User=root
 
