@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, ANY
 
 import discord
 import pytest
@@ -49,35 +49,6 @@ async def test_anthropic(bot, mock_interaction):
         mock_anthropic.assert_called_once_with(
             "test prompt", 1024, "claude-3-5-sonnet-20240620"
         )
-
-
-from unittest.mock import ANY, AsyncMock, patch
-
-import discord
-import pytest
-
-from commands import text
-
-pytestmark = pytest.mark.asyncio
-
-from unittest.mock import ANY, AsyncMock, patch
-
-import discord
-import pytest
-
-from commands import text
-
-pytestmark = pytest.mark.asyncio
-
-
-from unittest.mock import ANY, AsyncMock, patch
-
-import discord
-import pytest
-
-from commands import text
-
-pytestmark = pytest.mark.asyncio
 
 
 async def test_gpt(bot, mock_interaction):
