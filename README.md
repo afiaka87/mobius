@@ -45,6 +45,16 @@ Here's a list of available slash commands:
 - `/gpt`: Chat with GPT models using the OpenAI API.
 - `/refine`: Refine a prompt using GPT-4-turbo.
 
+## Image Commands
+- `/flux`: Generate images using Flux.
+- `/dalle`: Generate images using DALL-E 3.
+- `/unload_comfy`: Unload models from vRAM on the ComfyUI server.
+
+## Utility Commands
+- `/youtube`: Search youtube. Returns top result.
+- `/temp`: Get the temperature.
+- `/google`: Uses the google custom search api to get results from the web.
+
 Note: This list may not be exhaustive and could change as the bot is developed further. For the most up-to-date list of commands and their descriptions, use the Discord built-in slash command interface or check the files in the `commands` directory.
 
 # daemon
