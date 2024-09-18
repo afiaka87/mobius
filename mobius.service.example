@@ -1,0 +1,10 @@
+[Unit]
+Description=Clays discord bot mobius.
+After=network.target
+
+[Service]
+ExecStart=/bin/bash /home/sam/Projects/mobius/run.sh
+User=root
+
+[Install]
+WantedBy=multi-user.target
