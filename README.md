@@ -75,24 +75,16 @@ User=root
 WantedBy=multi-user.target
 ```
 
-Then, daemon-reload:
+Then enable and start the service:
 ```bash
 sudo systemctl daemon-reload
-```
-
-And enable the service:
-```bash
 sudo systemctl enable mobius.service
-```
-
-And start the service:
-```bash
 sudo systemctl start mobius.service
 ```
 
-And check the status:
+To check the logs, use `journalctl`:
 ```bash
-sudo systemctl status mobius.service
+sudo journalctl -u mobius.service -f
 ```
 
 
