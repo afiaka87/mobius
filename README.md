@@ -3,7 +3,7 @@
 
 A discord bot by/for Clay. Currently a work-in-progress. Not really meant for public consumption.
 
-# installation
+## Installation
 
 ```bash
 git clone https://github.com/afiaka87/mobius.git
@@ -29,35 +29,76 @@ Then run the bot:
 (venv) python3 main.py
 ```
 
+## Usage
 
-# usage
-
-## slash commands
+### Slash Commands
 
 Here's a list of available slash commands:
 
-### Audio Commands
+#### Audio Commands
 - `/wav`: Generate a song or sound from text using stable audio open.
 - `/say`: Generate speech from text using OpenAI's TTS API.
 
-### Text Commands
+#### Text Commands
 - `/anthropic`: Chat with Claude AI using the Anthropic API.
 - `/gpt`: Chat with GPT models using the OpenAI API.
 - `/refine`: Refine a prompt using GPT-4-turbo.
 
-## Image Commands
+### Image Commands
 - `/flux`: Generate images using Flux.
 - `/dalle`: Generate images using DALL-E 3.
 - `/unload_comfy`: Unload models from vRAM on the ComfyUI server.
 
-## Utility Commands
+### Utility Commands
 - `/youtube`: Search youtube. Returns top result.
 - `/temp`: Get the temperature.
 - `/google`: Uses the google custom search api to get results from the web.
 
 Note: This list may not be exhaustive and could change as the bot is developed further. For the most up-to-date list of commands and their descriptions, use the Discord built-in slash command interface or check the files in the `commands` directory.
 
-# daemon
+## Web UI
+
+In addition to the Discord bot interface, mobius now offers a web-based user interface powered by Gradio. This allows users to interact with the bot's functionality through a browser.
+
+### Running the Web UI
+
+To start the web UI, follow these steps:
+
+1. Ensure you have activated your virtual environment:
+   ```
+   source .venv/bin/activate
+   ```
+
+2. Run the web UI script:
+   ```
+   python webui.py
+   ```
+
+   By default, this will start the server on `http://127.0.0.1:7860`.
+
+3. To specify a different IP address or port, use the following command-line arguments:
+   ```
+   python webui.py --listen 0.0.0.0 --port 8080
+   ```
+   This example would make the web UI accessible on your local network at port 8080.
+
+4. Open the provided URL in your web browser to access the interface.
+
+### Using the Web UI
+
+The web UI is organized into tabs, each corresponding to a category of commands:
+
+- **Image Generation**: Create images using Flux, DALL-E, and other image generation models.
+- **Audio**: Generate audio clips and text-to-speech using various models.
+- **Text**: Interact with language models like GPT and Claude for text generation and refinement.
+- **Utility**: Access utility functions like YouTube search, temperature checks, and Google search.
+- **Video**: (Placeholder for future video-related functionality)
+
+Each tab contains interfaces for the various commands, mirroring the functionality available through the Discord bot. Simply fill in the required fields and click the submit button to execute a command.
+
+Note: The web UI uses the same environment variables and backend services as the Discord bot, so ensure your `.env` file is properly configured before using the web interface.
+
+## Daemon
 
 Systemd is used to run the bot as a daemon. To install the daemon, write the following to `/etc/systemd/system/mobius.service` (be sure to change the working directory to the correct path):
 
@@ -87,15 +128,14 @@ To check the logs, use `journalctl`:
 sudo journalctl -u mobius.service -f
 ```
 
-
-# tests
+## Tests
 
 To run the tests, use `pytest`:
 ```bash
 pytest
 ```
 
-# license
+# License
 
 ```
 MIT License
