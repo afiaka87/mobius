@@ -40,3 +40,6 @@ Thumbs.db
 
 # Gradio app
 flagged/
+
+# local cache
+.cache/
