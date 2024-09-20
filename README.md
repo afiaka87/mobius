@@ -43,6 +43,7 @@ Here's a list of available slash commands:
 - `/anthropic`: Chat with Claude AI using the Anthropic API.
 - `/gpt`: Chat with GPT models using the OpenAI API.
 - `/refine`: Refine a prompt using GPT-4-turbo.
+- `/ollama`: Chat with Ollama models.
 
 ### Image Commands
 - `/flux`: Generate images using Flux.
@@ -90,7 +91,7 @@ The web UI is organized into tabs, each corresponding to a category of commands:
 
 - **Image Generation**: Create images using Flux, DALL-E, and other image generation models.
 - **Audio**: Generate audio clips and text-to-speech using various models.
-- **Text**: Interact with language models like GPT and Claude for text generation and refinement.
+- **Text**: Interact with LLM providers like GPT, Claude, and Ollama for text generation and refinement.
 - **Utility**: Access utility functions like YouTube search, temperature checks, and Google search.
 - **Video**: (Placeholder for future video-related functionality)
 
