@@ -21,6 +21,7 @@ def create_gradio_app():
             audio.create_interfaces()
 
         with gr.Tab("Text"):
+
             text.create_interfaces()
 
         with gr.Tab("Utility"):
