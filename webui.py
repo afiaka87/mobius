@@ -11,8 +11,8 @@ from gradio_app import image_generation, audio, text, utility, video
 
 def create_gradio_app():
     # Create blocks for each category
-    with gr.Blocks(title="Discord Bot Web UI") as app:
-        gr.Markdown("# Discord Bot Web UI")
+    with gr.Blocks(title="Lame-othy") as app:
+        gr.Markdown("Lame-othy")
 
         with gr.Tab("Image Generation"):
             image_generation.create_interfaces()
@@ -21,6 +21,7 @@ def create_gradio_app():
             audio.create_interfaces()
 
         with gr.Tab("Text"):
+
             text.create_interfaces()
 
         with gr.Tab("Utility"):
@@ -49,4 +50,4 @@ if __name__ == "__main__":
 
     app = create_gradio_app()
     app.queue()  # Enable queueing for handling concurrent requests
-    app.launch(server_name=args.listen, server_port=args.port)
+    app.launch(server_name=args.listen, server_port=args.port, share=True)
