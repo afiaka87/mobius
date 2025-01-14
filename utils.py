@@ -1,15 +1,114 @@
+import base64
+import imghdr
+import io
 import os
+import tempfile
+from pathlib import Path
+from typing import Union
 
 import cv2
+import discord
+import httpx
 import numpy as np
 from moviepy.editor import AudioFileClip, ImageSequenceClip
+from PIL import Image
 from pydub import AudioSegment
 from scipy.ndimage import gaussian_filter1d
+import datetime
+
+
+def create_temp_file(content: str, suffix: str = ".txt") -> str:
+    with open(
+        f"response_{datetime.now().strftime('%Y%m%d%H%M%S')}{suffix}",
+        "w",
+        encoding="utf-8",
+    ) as f:
+        f.write(content)
+    return f.name
+
+
+def convert_base64_images_to_discord_files(base64_images) -> list[discord.File]:
+    discord_files = []
+    for base64_image in base64_images:
+        image_stub = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False).name
+        os.makedirs(os.path.dirname(image_stub), exist_ok=True)
+
+        # if image is base64 str, convert to bytes
+        if isinstance(base64_image, str):
+            base64_image = base64.b64decode(base64_image)
+
+        pil_image = Image.open(io.BytesIO(base64_image))
+        pil_image.save(image_stub, "JPEG", quality=95)
+        discord_files.append(discord.File(image_stub))
+    return discord_files
+
+
+def convert_base64_gifs_to_discord_files(base64_images) -> list[discord.File]:
+    discord_files = []
+    for base64_image in base64_images:
+        image_stub = tempfile.NamedTemporaryFile(suffix=".gif", delete=False).name
+        os.makedirs(os.path.dirname(image_stub), exist_ok=True)
+        pil_gif = Image.open(io.BytesIO(base64_image))
+        pil_gif.save(image_stub, "GIF", quality=95)
+        discord_files.append(discord.File(image_stub))
+    return discord_files
+
+
+def download_image(image_url: str, save_path: Union[str, Path]) -> Path:
+    """
+    Download an image from the given URL and save it to the specified path.
+
+    Args:
+        image_url (str): The URL of the image to download.
+        save_path (Union[str, Path]): The path where the image will be saved.
+    """
+    # Send a GET request to the image URL
+    response = httpx.get(image_url)
+
+    # Raise an exception if the request was unsuccessful
+    response.raise_for_status()
+
+    # Get the image content from the response
+    image_content = response.content
+
+    # Determine the image file type/extension
+    image_type = imghdr.what(None, h=image_content)
+
+    if image_type is None:
+        raise ValueError("Unable to determine the image file type.")
+
+    # Create a Path object for the save path
+    save_path = Path(save_path)
+
+    # Ensure the directory exists
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Save the image with the correct extension
+    with open(save_path.with_suffix(f".{image_type}"), "wb") as file:
+        file.write(image_content)
+
+    print(f"Image downloaded and saved as {save_path.with_suffix(f'.{image_type}')}")
+
+    # Return (full) save path with the correct extension
+    return save_path.with_suffix(f".{image_type}")
+
+
+async def download_image_as_b64(
+    image_url: str,
+) -> str:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(image_url)
+        image = response.content
+        image_base64 = base64.b64encode(image).decode("utf-8")
+        # needs to be in form data:image/jpeg;base64,{image}
+        return f"data:image/jpeg;base64,{image_base64}"
+
+
+def markdown_header(title: str, content: str) -> str:
+    return f"**{title}**\n```md\n{content}\n```"
 
 
 def convert_audio_to_waveform_video(audio_file: str, video_file: str):
-
-    # convert possible Path to str
     if isinstance(audio_file, os.PathLike):
         audio_file = str(audio_file)
         print(f"Converted audio_file to str: {audio_file}")
@@ -18,10 +117,12 @@ def convert_audio_to_waveform_video(audio_file: str, video_file: str):
         print(f"Converted output_file to str: {video_file}")
 
     if not audio_file.endswith(".mp3") and not audio_file.endswith(".wav"):
-        raise ValueError("Audio file must be in MP3 or WAV format")
+        raise ValueError(
+            f"Audio file must be in MP3 or WAV format. Instead got {audio_file}"
+        )
 
     if not video_file.endswith(".mp4"):
-        raise ValueError("Output file must be in MP4 format")
+        raise ValueError(f"Output file must be in MP4 format. Instead got {video_file}")
 
     if not os.path.exists(audio_file):
         raise FileNotFoundError(f"Audio file {audio_file} not found")

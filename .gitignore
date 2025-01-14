@@ -6,13 +6,16 @@ __pycache__/
 # Virtual Environment
 venv/
 env/
-.env
+.venv/
 
 # IDEs and Editors
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# Environment Variables
+.env
 
 # Project-specific
 history.json
@@ -31,9 +34,6 @@ history.json
 # Discord bot token
 token.txt
 
-# OpenAI API Key
-openai_api_key.txt
-
 # Miscellaneous
 .DS_Store
 Thumbs.db
@@ -43,3 +43,10 @@ flagged/
 
 # local cache
 .cache/
+.pytest_cache/
+
+# Build files
+build/
+dist/
+*.egg-info/
+*.egg
