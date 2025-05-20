@@ -1,17 +1,99 @@
 [project]
 name = "mobius-refactored"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Discord bot with AI capabilities."
 readme = "README.md"
 requires-python = ">=3.12.3"
+license = { file = "LICENSE.txt" }
+authors = [
+    { name = "Clayton Mullis", email = "clay@example.com" } # Optional: Add your email
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Communications :: Chat",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
 dependencies = [
     "anthropic>=0.42.0",
     "discord-py>=2.4.0",
     "fal-client>=0.5.6",
-    "moviepy==1.0.3",
+    "moviepy==1.0.3", # Consider if specific version is strictly needed or if >= is okay
+    "nest-asyncio>=1.6.0",
     "openai>=1.59.7",
     "opencv-python>=4.10.0.84",
     "pydub>=0.25.1",
     "python-dotenv>=1.0.1",
+    # "python-weather>=2.0.7", # This was commented out in services.py, confirm if still needed
     "scipy>=1.15.1",
+    "httpx>=0.27.0",
+    "comfy-api-simplified", # Added based on usage in services.py (ensure version if critical)
+    "Pillow>=10.0.0", # For PIL.Image, used in services.py and utils.py
 ]
+
+[project.urls]
+Homepage = "https://github.com/afiaka87/mobius"
+Repository = "https://github.com/afiaka87/mobius"
+# BugTracker = "https://github.com/afiaka87/mobius/issues" # Optional
+
+[project.scripts]
+mobius_bot = "bot:main" # Assuming bot.py will have a main() function for this
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.5.0",
+    "pytest>=8.0.0",
+    "mypy>=1.10.0",
+    # types-Pillow = ">=10.0.0"
+    # types-PyYAML = "..."
+    # types-requests = "..."
+    # types-aiofiles = "..."
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+backend-path = "." # This is often not needed if pyproject.toml is at the root
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "W", "C90", "I", "N", "UP", "ANN", "S", "BLE", "A", "COM", "LOG", "TID", "PYI", "PT", "Q", "SIM", "TCH", "ARG", "TRY", "RUF"]
+ignore = [
+    "ANN101", # Missing type annotation for self
+    "ANN102", # Missing type annotation for cls
+    "ANN401", # Dynamically typed expressions (Any) are disallowed
+    "COM812", # Missing trailing comma in multi-line collection literals
+    "S101",   # Use of assert detected (okay for tests, but be mindful in app code)
+]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 88 # Example: if you want to enforce docstring line lengths
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true # Start with true, can be refined later
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+# strict = true # Consider enabling for maximum type safety later
+# enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+# Example of per-module settings if needed:
+# [[tool.mypy.overrides]]
+# module = "some_untyped_library.*"
+# ignore_missing_imports = true

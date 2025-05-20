@@ -1,0 +1,24 @@
+# fly.toml app configuration file generated for mobius-refactored on 2025-05-20T14:27:14-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'mobius-refactored'
+primary_region = 'dfw'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+# Removing the [http_service] section since this is a Discord bot, not a web server
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  processes = ["app"]
+  mounts = [
+    {source = "mobius_cache", destination = "/app/.cache"}
+  ]
+
+[processes]
+  app = ".venv/bin/python bot.py"
