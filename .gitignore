@@ -50,3 +50,10 @@ build/
 dist/
 *.egg-info/
 *.egg
+
+
+# Linter (ruff)
+.ruff_cache/
+
+# Type checker (mypy)
+.mypy_cache/

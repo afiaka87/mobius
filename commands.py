@@ -17,8 +17,8 @@ from typing import (
     Any,
     Final,
     Literal,
-    Union,
-)  # Python 3.8+ for Literal
+    cast,
+)
 
 import discord
 import fal_client
@@ -48,7 +48,7 @@ COMMANDS_INFO: Final[dict[str, str]] = {
 }
 
 # Type alias for model choice values
-ModelChoiceValue = Union[str, float]
+ModelChoiceValue = str | float
 
 # Available model choices for various commands
 MODEL_CHOICES: Final[dict[str, list[ModelChoiceValue]]] = {
@@ -79,8 +79,12 @@ MODEL_CHOICES: Final[dict[str, list[ModelChoiceValue]]] = {
         "square_hd",
     ],
     "gptimg_models": ["gpt-image-1"],
-    "gptimg_sizes": ["1024x1024", "1024x1536", "1536x1024"],  # For OpenAI image models
-    "gptimg_quality": ["low", "medium", "high", "auto"],
+    # For OpenAI image models - contains all size options for both generation and editing
+    "gptimg_sizes": [
+        "1024x1024", "1792x1024", "1024x1792",  # Generation sizes
+        "1024x1536", "1536x1024", "256x256", "512x512",  # Edit sizes
+    ],
+    "gptimg_quality": ["standard", "hd"],
     "gptimg_formats": ["jpeg", "png", "webp"],
 }
 
@@ -111,8 +115,12 @@ FalImageSize = Literal[
     "square_hd",
 ]
 GPTImageModel = Literal["gpt-image-1"]
-GPTImageSize = Literal["1024x1024", "1024x1536", "1536x1024"]
-GPTImageQuality = Literal["low", "medium", "high", "auto"]
+# Define separate types for generation and editing
+GPTImageGenerationSize = Literal["1024x1024", "1792x1024", "1024x1792"]
+GPTImageEditSize = Literal["1024x1024", "1024x1536", "1536x1024", "256x256", "512x512"]
+# Use a union type for UI/choice display
+GPTImageSize = Literal["1024x1024", "1792x1024", "1024x1792", "1024x1536", "1536x1024", "256x256", "512x512"]
+GPTImageQuality = Literal["standard", "hd"]
 GPTImageFormat = Literal["jpeg", "png", "webp"]
 
 
@@ -132,9 +140,9 @@ async def help_command(interaction: discord.Interaction) -> None:
 )
 @app_commands.choices(
     voice=[
-        app_commands.Choice(name=voice_name, value=voice_name)
+        app_commands.Choice(name=str(voice_name), value=voice_name)
         for voice_name in MODEL_CHOICES["voices"]
-    ],
+    ],  # type: ignore # Mypy can't infer the type argument
     speed=[
         app_commands.Choice(name=f"{speed_val}x", value=str(speed_val))
         for speed_val in MODEL_CHOICES["speeds"]
@@ -171,7 +179,7 @@ async def say_command(
     except (
         ValueError
     ) as e:  # Catches float conversion error or errors from services.generate_speech
-        logger.error(f"Error in 'say' command processing: {e}")
+        logger.exception(f"Error in 'say' command processing: {e}")
         await interaction.followup.send(
             f"An error occurred: {e}. Please check your input.", ephemeral=True
         )
@@ -184,9 +192,9 @@ async def say_command(
 
 @app_commands.command(name="flux", description="Generate images with FLUX models.")
 @app_commands.choices(
-    model=[app_commands.Choice(name=m, value=m) for m in MODEL_CHOICES["flux_models"]],
+    model=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["flux_models"]],
     image_size=[
-        app_commands.Choice(name=s, value=s) for s in MODEL_CHOICES["image_sizes"]
+        app_commands.Choice(name=str(s), value=s) for s in MODEL_CHOICES["image_sizes"]
     ],
 )
 async def flux_command(
@@ -220,7 +228,7 @@ async def flux_command(
     name="sd3_5_large", description="Generate images with Stable Diffusion 3.5 Large."
 )
 @app_commands.choices(
-    model=[app_commands.Choice(name=m, value=m) for m in MODEL_CHOICES["sd_models"]]
+    model=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["sd_models"]]
 )
 async def sd3_5_large_command(
     interaction: discord.Interaction,
@@ -290,7 +298,7 @@ async def rembg_command(
     name="anthropic", description="Chat completion with Anthropic Claude models."
 )
 @app_commands.choices(
-    model=[app_commands.Choice(name=m, value=m) for m in MODEL_CHOICES["anthropic"]]
+    model=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["anthropic"]]
 )
 async def anthropic_command(
     interaction: discord.Interaction,
@@ -315,7 +323,7 @@ async def anthropic_command(
         )
 
         if len(formatted_response) >= 2000:
-            temp_file_path: str = utils.create_temp_file(formatted_response, ".md")
+            temp_file_path: Path = utils.create_temp_file(formatted_response, ".md")
             discord_file: discord.File = discord.File(
                 temp_file_path, filename="response.md"
             )
@@ -326,7 +334,7 @@ async def anthropic_command(
             try:
                 os.remove(temp_file_path)
             except OSError as e:
-                logger.error(f"Error deleting temporary file {temp_file_path}: {e}")
+                logger.exception(f"Error deleting temporary file {temp_file_path}: {e}")
         else:
             await interaction.followup.send(
                 content=formatted_response, suppress_embeds=suppress_embeds
@@ -356,7 +364,7 @@ async def _handle_long_response(
         model_name: The name of the model used.
         seed: The optional seed used for generation.
     """
-    temp_file_path: str = ""
+    temp_file_path: Path = Path()
     try:
         temp_file_path = utils.create_temp_file(content, ".md")
         discord_file: discord.File = discord.File(
@@ -387,7 +395,7 @@ async def _handle_long_response(
             try:
                 os.remove(temp_file_path)
             except OSError as e:
-                logger.error(f"Error deleting temporary file {temp_file_path}: {e}")
+                logger.exception(f"Error deleting temporary file {temp_file_path}: {e}")
 
 
 @app_commands.command(
@@ -395,7 +403,7 @@ async def _handle_long_response(
     description="Chat with OpenAI's GPT models. Supports history. Outputs as embed.",
 )
 @app_commands.choices(
-    model_name=[app_commands.Choice(name=m, value=m) for m in MODEL_CHOICES["gpt"]]
+    model_name=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["gpt"]]
 )
 async def gpt_command(
     interaction: discord.Interaction,
@@ -448,7 +456,7 @@ async def gpt_command(
     description="Generate a response using OpenAI's o1 series models (stateless).",
 )
 @app_commands.choices(
-    model_name=[app_commands.Choice(name=m, value=m) for m in MODEL_CHOICES["o1"]]
+    model_name=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["o1"]]
 )
 async def o1_command(
     interaction: discord.Interaction,
@@ -622,14 +630,14 @@ async def t2v_command(
 )
 @app_commands.choices(
     model=[
-        app_commands.Choice(name=m, value=m) for m in MODEL_CHOICES["gptimg_models"]
+        app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["gptimg_models"]
     ],
-    size=[app_commands.Choice(name=s, value=s) for s in MODEL_CHOICES["gptimg_sizes"]],
+    size=[app_commands.Choice(name=str(s), value=s) for s in MODEL_CHOICES["gptimg_sizes"]],
     quality=[
-        app_commands.Choice(name=q, value=q) for q in MODEL_CHOICES["gptimg_quality"]
+        app_commands.Choice(name=str(q), value=q) for q in MODEL_CHOICES["gptimg_quality"]
     ],
     output_format=[
-        app_commands.Choice(name=f, value=f) for f in MODEL_CHOICES["gptimg_formats"]
+        app_commands.Choice(name=str(f), value=f) for f in MODEL_CHOICES["gptimg_formats"]
     ],
 )
 async def gptimg_command(
@@ -640,9 +648,9 @@ async def gptimg_command(
     mask_image: discord.Attachment | None = None,
     model: GPTImageModel = "gpt-image-1",
     size: GPTImageSize = "1024x1024",
-    quality: GPTImageQuality = "medium",  # Used only for generation, not editing
+    quality: GPTImageQuality = "standard",  # Used only for generation, not editing
     output_format: GPTImageFormat = "png",  # Used only for generation
-) -> None:
+) -> None:  # Function returns nothing (works with discord commands)
     """
     Generates or edits images using OpenAI's GPT Image model.
     - Text-to-image: Provide a prompt.
@@ -671,8 +679,8 @@ async def gptimg_command(
     try:
         initial_message = await interaction.followup.send(progress_message_content)
     except discord.HTTPException as e:
-        logger.error(f"Failed to send initial progress message for gptimg: {e}")
-        return
+        logger.exception(f"Failed to send initial progress message for gptimg: {e}")
+        return None  # Explicit return to satisfy mypy
 
     operation_complete_event: asyncio.Event = asyncio.Event()
     update_task: asyncio.Task[None] | None = None
@@ -719,29 +727,29 @@ async def gptimg_command(
                     await mask_image.save(Path(tmp_mask_file.name))
                     temp_mask_path = Path(tmp_mask_file.name)
 
-        MAX_GENERATION_TIME_SECONDS: Final[int] = 180
-        PROGRESS_UPDATE_INTERVAL_SECONDS: Final[int] = 3
-        ESTIMATED_COMPLETION_TIME_SECONDS: Final[int] = 90
+        max_generation_time_seconds: Final[int] = 180
+        progress_update_interval_seconds: Final[int] = 3
+        estimated_completion_time_seconds: Final[int] = 90
 
         async def update_progress_periodically() -> None:
             nonlocal initial_message
             update_count: int = 0
             max_updates: int = (
-                MAX_GENERATION_TIME_SECONDS // PROGRESS_UPDATE_INTERVAL_SECONDS + 5
+                max_generation_time_seconds // progress_update_interval_seconds + 5
             )
 
             while update_count < max_updates and not operation_complete_event.is_set():
                 elapsed_time: int = int(time.time() - start_time)
                 minutes, seconds = divmod(elapsed_time, 60)
 
-                if elapsed_time > MAX_GENERATION_TIME_SECONDS:
+                if elapsed_time > max_generation_time_seconds:
                     logger.warning(
                         f"gptimg: Generation timeout suspected after {elapsed_time}s."
                     )
                     break
 
                 progress_percentage: float = min(
-                    100.0, (elapsed_time / ESTIMATED_COMPLETION_TIME_SECONDS) * 100
+                    100.0, (elapsed_time / estimated_completion_time_seconds) * 100
                 )
                 segments: int = 10
                 filled_segments: int = int((progress_percentage / 100) * segments)
@@ -749,7 +757,7 @@ async def gptimg_command(
                     segments - filled_segments
                 )
                 est_remaining: int = max(
-                    0, ESTIMATED_COMPLETION_TIME_SECONDS - elapsed_time
+                    0, estimated_completion_time_seconds - elapsed_time
                 )
                 est_min, est_sec = divmod(est_remaining, 60)
 
@@ -772,21 +780,24 @@ async def gptimg_command(
                     initial_message = None
                     break
                 except discord.HTTPException as e_http:
-                    logger.error(f"gptimg: Error updating progress message: {e_http}")
+                    logger.exception(
+                        f"gptimg: Error updating progress message: {e_http}"
+                    )
 
                 try:
                     await asyncio.wait_for(
                         operation_complete_event.wait(),
-                        timeout=PROGRESS_UPDATE_INTERVAL_SECONDS,
+                        timeout=progress_update_interval_seconds,
                     )
                 except TimeoutError:
                     continue
                 except Exception as e_wait:
-                    logger.error(f"gptimg: Error in update_progress wait: {e_wait}")
+                    logger.exception(f"gptimg: Error in update_progress wait: {e_wait}")
                     break
             logger.info(
                 f"gptimg: Progress update loop finished. Updates: {update_count}"
             )
+            return None  # Explicit return to satisfy mypy
 
         update_task = asyncio.create_task(update_progress_periodically())
 
@@ -798,10 +809,15 @@ async def gptimg_command(
             generation_task = asyncio.create_task(
                 services.edit_gpt_image(
                     prompt=prompt,
-                    images=temp_image_paths,  # Pass the list of image paths
+                    images=temp_image_paths,  # Pass the list as Sequence[Path]
                     mask=temp_mask_path,
                     model=model,
-                    size=size,
+                    # Ensure size is compatible with edit API
+                    size=(
+                        cast("GPTImageEditSize", size)
+                        if size in {"1024x1024", "1024x1536", "1536x1024", "256x256", "512x512"}
+                        else "1024x1024"
+                    ),
                 )
             )
         else:  # Generating a new image
@@ -809,7 +825,12 @@ async def gptimg_command(
                 services.generate_gpt_image(
                     prompt=prompt,
                     model=model,
-                    size=size,
+                    # Ensure size is compatible with generation API
+                    size=(
+                        cast("GPTImageGenerationSize", size)
+                        if size in {"1024x1024", "1792x1024", "1024x1792"}
+                        else "1024x1024"
+                    ),
                     quality=quality,
                     output_format=output_format,
                 )
@@ -817,11 +838,11 @@ async def gptimg_command(
 
         try:
             generated_image_path = await asyncio.wait_for(
-                generation_task, timeout=MAX_GENERATION_TIME_SECONDS
+                generation_task, timeout=max_generation_time_seconds
             )
         except TimeoutError:
-            logger.error(
-                f"gptimg: Image {operation_type} timed out after {MAX_GENERATION_TIME_SECONDS}s."
+            logger.exception(
+                f"gptimg: Image {operation_type} timed out after {max_generation_time_seconds}s."
             )
             if generation_task and not generation_task.done():
                 generation_task.cancel()
@@ -832,7 +853,7 @@ async def gptimg_command(
                         "gptimg: Generation task successfully cancelled on timeout."
                     )
                 except Exception as e_cancel:
-                    logger.error(
+                    logger.exception(
                         f"gptimg: Error during generation task cancellation: {e_cancel}"
                     )
             raise RuntimeError(
@@ -843,7 +864,7 @@ async def gptimg_command(
             if update_task and not update_task.done():
                 try:
                     await asyncio.wait_for(
-                        update_task, timeout=PROGRESS_UPDATE_INTERVAL_SECONDS + 1
+                        update_task, timeout=progress_update_interval_seconds + 1
                     )
                 except TimeoutError:
                     logger.warning(
@@ -852,7 +873,7 @@ async def gptimg_command(
                     if not update_task.done():
                         update_task.cancel()  # Ensure cancellation
                 except Exception as e_await_update:
-                    logger.error(
+                    logger.exception(
                         f"gptimg: Error awaiting update task: {e_await_update}"
                     )
 
@@ -884,10 +905,10 @@ async def gptimg_command(
                 logger.warning(f"gptimg: Could not delete progress message: {e_del}")
 
     except ValueError as ve:
-        logger.error(f"gptimg: Input error - {ve}")
+        logger.exception(f"gptimg: Input error - {ve}")
         await interaction.followup.send(f"❌ Input error: {ve}", ephemeral=True)
     except RuntimeError as re:
-        logger.error(f"gptimg: Runtime error - {re}")
+        logger.exception(f"gptimg: Runtime error - {re}")
         await interaction.followup.send(f"❌ Runtime error: {re}", ephemeral=True)
     except Exception as e:
         logger.exception(
@@ -902,14 +923,14 @@ async def gptimg_command(
                 try:
                     p.unlink()
                 except OSError as e_unlink:
-                    logger.error(
+                    logger.exception(
                         f"gptimg: Error deleting temp image file {p}: {e_unlink}"
                     )
         if temp_mask_path and temp_mask_path.exists():
             try:
                 temp_mask_path.unlink()
             except OSError as e_unlink:
-                logger.error(
+                logger.exception(
                     f"gptimg: Error deleting temp mask file {temp_mask_path}: {e_unlink}"
                 )
 
@@ -925,4 +946,7 @@ async def gptimg_command(
                 await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
                 logger.info("gptimg: Remaining tasks cancelled in final cleanup.")
             except Exception as e_gather:
-                logger.error(f"gptimg: Error during final task cleanup: {e_gather}")
+                logger.exception(f"gptimg: Error during final task cleanup: {e_gather}")
+
+        # Explicitly return None to satisfy mypy
+        return None

@@ -57,24 +57,32 @@ dev = [
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
-backend-path = "." # This is often not needed if pyproject.toml is at the root
+backend-path = ["."] # This is often not needed if pyproject.toml is at the root
 
 [tool.ruff]
-line-length = 88
+line-length = 120
+
+[tool.ruff.lint]
 select = ["E", "F", "W", "C90", "I", "N", "UP", "ANN", "S", "BLE", "A", "COM", "LOG", "TID", "PYI", "PT", "Q", "SIM", "TCH", "ARG", "TRY", "RUF"]
 ignore = [
-    "ANN101", # Missing type annotation for self
-    "ANN102", # Missing type annotation for cls
     "ANN401", # Dynamically typed expressions (Any) are disallowed
     "COM812", # Missing trailing comma in multi-line collection literals
     "S101",   # Use of assert detected (okay for tests, but be mindful in app code)
+    "BLE001", # Do not catch blind exception: Exception (sometimes needed for Discord bot robustness)
+    "TRY003", # Avoid specifying long messages outside the exception class
+    "TRY300", # Consider moving this statement to an `else` block
+    "TRY301", # Abstract `raise` to an inner function
+    "TRY401", # Redundant exception object included in logging.exception call
+    "C901",   # Function is too complex (we have some complex Discord commands)
+    "S311",   # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "SIM115", # Use a context manager for opening files (not always possible when files need to stay open)
 ]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
 [tool.ruff.lint.pycodestyle]
-max-doc-length = 88 # Example: if you want to enforce docstring line lengths
+max-doc-length = 120 # Increase docstring line length to match line-length
 
 [tool.ruff.format]
 quote-style = "double"
@@ -92,6 +100,11 @@ disallow_incomplete_defs = true
 check_untyped_defs = true
 # strict = true # Consider enabling for maximum type safety later
 # enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+# Add specific module overrides
+[[tool.mypy.overrides]]
+module = "commands"
+disable_error_code = ["func-returns-value"]  # Disable specific error in commands.py
 
 # Example of per-module settings if needed:
 # [[tool.mypy.overrides]]

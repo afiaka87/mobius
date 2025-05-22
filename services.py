@@ -13,14 +13,20 @@ import base64
 import logging
 import os
 import random
+from collections.abc import Sequence
 from io import BytesIO
 from pathlib import Path
-from typing import Any, BinaryIO, Literal
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal, cast
 
 import fal_client
 import httpx
 import openai  # Main openai client
 from anthropic import AsyncAnthropic  # Separate client for Anthropic
+from anthropic._types import NotGiven as AnthropicNotGiven
+
+if TYPE_CHECKING:
+    from anthropic.types.messages.tool_param import ToolParam as AnthropicToolParam
+
 from anthropic.types import Message as AnthropicMessage  # Alias to avoid confusion
 from openai import OpenAI as OpenAIClient  # Explicitly alias for clarity
 from PIL import Image
@@ -99,16 +105,18 @@ async def gpt_chat_completion(
             raise ValueError("Invalid response structure from OpenAI API.")
 
     except openai.APIConnectionError as e:
-        logger.error(f"OpenAI API connection error: {e}")
+        logger.exception(f"OpenAI API connection error: {e}")
         raise
     except openai.RateLimitError as e:
-        logger.error(f"OpenAI API rate limit exceeded: {e}")
+        logger.exception(f"OpenAI API rate limit exceeded: {e}")
         raise
     except openai.AuthenticationError as e:
-        logger.error(f"OpenAI API authentication error: {e}")
+        logger.exception(f"OpenAI API authentication error: {e}")
         raise
     except openai.APIStatusError as e:
-        logger.error(f"OpenAI API status error (code {e.status_code}): {e.response}")
+        logger.exception(
+            f"OpenAI API status error (code {e.status_code}): {e.response}"
+        )
         raise
     except Exception as e:
         logger.exception(
@@ -118,7 +126,11 @@ async def gpt_chat_completion(
 
 
 # --- OpenAI Speech Generation Service ---
-async def generate_speech(text: str, voice: str, speed: float) -> Path:
+# Define a type alias for voice options to improve readability
+VoiceType = Literal["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
+
+
+async def generate_speech(text: str, voice: VoiceType, speed: float) -> Path:
     """
     Generates speech from text using OpenAI's TTS API and converts it to a waveform video.
 
@@ -157,7 +169,7 @@ async def generate_speech(text: str, voice: str, speed: float) -> Path:
     try:
         response = tts_client.audio.speech.create(
             model="tts-1-hd",  # Or "tts-1"
-            voice=voice,  # type: ignore - voice is a string literal, but API expects specific enum-like values
+            voice=voice,  # Using correct literal type that matches API expectations
             input=text,
             speed=speed,
             response_format="mp3",
@@ -235,18 +247,21 @@ async def anthropic_chat_completion(
     # Client automatically picks up ANTHROPIC_API_KEY from env
     anthropic_client: AsyncAnthropic = AsyncAnthropic()
 
-    tool_config: dict[str, Any] = {
-        "type": "web_search_20250305",  # Using the specified tool type
-        "name": "web_search",
-        "max_uses": max_uses,
-        "user_location": {  # Optional: provide user location context
-            "type": "approximate",
-            "city": "Fayetteville",
-            "region": "Arkansas",
-            "country": "US",
-            "timezone": "America/Chicago",
+    tool_config: AnthropicToolParam = cast(
+        "AnthropicToolParam",
+        {
+            "type": "web_search_20250305",  # Using the specified tool type
+            "name": "web_search",
+            "max_uses": max_uses,
+            "user_location": {  # Optional: provide user location context
+                "type": "approximate",
+                "city": "Fayetteville",
+                "region": "Arkansas",
+                "country": "US",
+                "timezone": "America/Chicago",
+            },
         },
-    }
+    )
 
     logger.info(
         f"Requesting Anthropic completion: model={model}, prompt='{prompt[:50]}...'"
@@ -257,7 +272,7 @@ async def anthropic_chat_completion(
             messages=[{"role": "user", "content": prompt}],
             model=model,
             tools=(
-                [tool_config] if max_uses > 0 else None
+                [tool_config] if max_uses > 0 else AnthropicNotGiven()
             ),  # Only include tool if useful
             # extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}, # If needed
         )
@@ -381,7 +396,7 @@ async def google_search(query: str) -> str:
             )
             return "\n".join(links)
         except httpx.HTTPStatusError as e:
-            logger.error(
+            logger.exception(
                 f"Google Search API HTTP error for query '{query}': {e.response.status_code} - {e.response.text}"
             )
             raise
@@ -463,12 +478,12 @@ async def temp_callback() -> str:
             )
             # Attempt to parse wind chill if it's a simple numeric value
             # This part is speculative based on typical API structures; adjust if NWS is different.
-            if isinstance(wind_chill_value, (int, float)):
+            if isinstance(wind_chill_value, int | float):
                 result_str += f" with wind chill of {wind_chill_value}°{temp_unit}"
             elif (
                 isinstance(wind_chill_value, dict)
                 and "value" in wind_chill_value
-                and isinstance(wind_chill_value["value"], (int, float))
+                and isinstance(wind_chill_value["value"], int | float)
             ):
                 result_str += (
                     f" with wind chill of {wind_chill_value['value']}°{temp_unit}"
@@ -478,7 +493,7 @@ async def temp_callback() -> str:
             return result_str
 
         except httpx.HTTPStatusError as e:
-            logger.error(
+            logger.exception(
                 f"NWS API HTTP error: {e.response.status_code} - {e.response.text}"
             )
             raise
@@ -541,7 +556,7 @@ async def get_top_youtube_result(search_query: str, api_key: str) -> dict[str, A
             return video_info
 
         except httpx.HTTPStatusError as e:
-            logger.error(
+            logger.exception(
                 f"YouTube API HTTP error for query '{search_query}': {e.response.status_code} - {e.response.text}"
             )
             return {"error": f"YouTube API error: {e.response.status_code}"}
@@ -696,9 +711,9 @@ async def generate_gpt_image(
         # response_format is NOT a parameter for images.generate in openai >= 1.0
         # The API returns b64_json by default if the model supports it or if URL is not applicable.
     }
-    if model == "dall-e-3":  # DALL-E 3 specific parameters
-        if style:
-            api_params["style"] = style
+    # DALL-E 3 specific parameters - only add style if model is dall-e-3 and style is specified
+    if model == "dall-e-3" and style:
+        api_params["style"] = style
     if user:
         api_params["user"] = user
 
@@ -774,7 +789,7 @@ async def generate_gpt_image(
         return file_path
 
     except openai.BadRequestError as e:
-        logger.error(
+        logger.exception(
             f"OpenAI image generation bad request (prompt: '{prompt[:50]}...'): {e}"
         )
         error_detail = str(e)
@@ -799,7 +814,7 @@ async def generate_gpt_image(
 
 async def edit_gpt_image(
     prompt: str,
-    images: list[Path | BinaryIO],  # List of image paths or file-like objects
+    images: Sequence[Path | BinaryIO],  # Sequence of image paths or file-like objects
     mask: Path | BinaryIO | None = None,
     model: str = "gpt-image-1",  # DALL-E 2 for edits, gpt-image-1 might have different endpoint/params
     size: Literal[
@@ -852,16 +867,24 @@ async def edit_gpt_image(
     opened_mask_file: BinaryIO | None = None
 
     try:
+        # When we're dealing with Path objects, we'll open them and take responsibility for closing
+        # When we're given file-like objects, we'll just use them as-is (but seek to the beginning)
         for img_src in images:
             if isinstance(img_src, Path):
-                opened_image_files.append(open(img_src, "rb"))
+                # Note: We're still opening files here but will close them in the finally block
+                # We can't use a context manager directly since we need to keep the files open
+                # for the API call that comes after this loop
+                file_obj = open(img_src, "rb")
+                opened_image_files.append(file_obj)
             else:  # BinaryIO
                 img_src.seek(0)  # Ensure reading from the beginning
                 opened_image_files.append(img_src)
 
         if mask:
             if isinstance(mask, Path):
-                opened_mask_file = open(mask, "rb")
+                # Same note applies here - we'll close this in the finally block
+                file_obj = open(mask, "rb")
+                opened_mask_file = file_obj
             else:  # BinaryIO
                 mask.seek(0)
                 opened_mask_file = mask
@@ -882,6 +905,7 @@ async def edit_gpt_image(
         # models like `gpt-image-1` as shown in `api.md`, *does* seem to handle a list of
         # file-like objects for the `image` parameter. The library must be forming
         # a multipart request appropriately.
+        # TODO above is almost completely false.
 
         api_params: dict[str, Any] = {
             "model": model,
@@ -926,7 +950,7 @@ async def edit_gpt_image(
         return file_path
 
     except openai.BadRequestError as e:
-        logger.error(
+        logger.exception(
             f"OpenAI image editing bad request (prompt: '{prompt[:50]}...'): {e}"
         )
         # Try to get a more specific message from the API response body
@@ -957,18 +981,16 @@ async def edit_gpt_image(
         logger.exception(
             f"Unexpected error editing OpenAI image for prompt '{prompt[:50]}...': {e}"
         )
-        raise RuntimeError(
-            f"An unexpected error occurred during image editing: {e!s}"
-        )
+        raise RuntimeError(f"An unexpected error occurred during image editing: {e!s}")
     finally:
         # Ensure all opened files are closed
         for f in opened_image_files:
             try:
                 f.close()
             except Exception as e_close:
-                logger.error(f"Error closing image file: {e_close}")
+                logger.exception(f"Error closing image file: {e_close}")
         if opened_mask_file:
             try:
                 opened_mask_file.close()
             except Exception as e_close:
-                logger.error(f"Error closing mask file: {e_close}")
+                logger.exception(f"Error closing mask file: {e_close}")
