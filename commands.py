@@ -78,14 +78,14 @@ MODEL_CHOICES: Final[dict[str, list[ModelChoiceValue]]] = {
         "square",
         "square_hd",
     ],
-    "gptimg_models": ["gpt-image-1"],
-    # For OpenAI image models - contains all size options for both generation and editing
+    "gptimg_models": ["gpt-image-1"],  # Simplified to just the GPT Image model
     "gptimg_sizes": [
-        "1024x1024", "1792x1024", "1024x1792",  # Generation sizes
-        "1024x1536", "1536x1024", "256x256", "512x512",  # Edit sizes
+        "auto",
+        "1024x1024",
+        "1536x1024",
+        "1024x1536",  # GPT Image supported sizes
     ],
-    "gptimg_quality": ["standard", "hd"],
-    "gptimg_formats": ["jpeg", "png", "webp"],
+    "gptimg_quality": ["auto", "low", "medium", "high"],  # GPT Image quality options
 }
 
 # Type aliases for specific string literals used in choices
@@ -114,14 +114,10 @@ FalImageSize = Literal[
     "square",
     "square_hd",
 ]
+
 GPTImageModel = Literal["gpt-image-1"]
-# Define separate types for generation and editing
-GPTImageGenerationSize = Literal["1024x1024", "1792x1024", "1024x1792"]
-GPTImageEditSize = Literal["1024x1024", "1024x1536", "1536x1024", "256x256", "512x512"]
-# Use a union type for UI/choice display
-GPTImageSize = Literal["1024x1024", "1792x1024", "1024x1792", "1024x1536", "1536x1024", "256x256", "512x512"]
-GPTImageQuality = Literal["standard", "hd"]
-GPTImageFormat = Literal["jpeg", "png", "webp"]
+GPTImageSize = Literal["auto", "1024x1024", "1536x1024", "1024x1536"]
+GPTImageQuality = Literal["auto", "low", "medium", "high"]
 
 
 @app_commands.command(
@@ -192,7 +188,9 @@ async def say_command(
 
 @app_commands.command(name="flux", description="Generate images with FLUX models.")
 @app_commands.choices(
-    model=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["flux_models"]],
+    model=[
+        app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["flux_models"]
+    ],
     image_size=[
         app_commands.Choice(name=str(s), value=s) for s in MODEL_CHOICES["image_sizes"]
     ],
@@ -228,7 +226,9 @@ async def flux_command(
     name="sd3_5_large", description="Generate images with Stable Diffusion 3.5 Large."
 )
 @app_commands.choices(
-    model=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["sd_models"]]
+    model=[
+        app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["sd_models"]
+    ]
 )
 async def sd3_5_large_command(
     interaction: discord.Interaction,
@@ -298,7 +298,9 @@ async def rembg_command(
     name="anthropic", description="Chat completion with Anthropic Claude models."
 )
 @app_commands.choices(
-    model=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["anthropic"]]
+    model=[
+        app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["anthropic"]
+    ]
 )
 async def anthropic_command(
     interaction: discord.Interaction,
@@ -626,40 +628,52 @@ async def t2v_command(
 
 @app_commands.command(
     name="gptimg",
-    description="Generate or edit images using OpenAI's GPT Image model (takes 30-90s).",
+    description="Generate or edit images using OpenAI's GPT Image model (saves as PNG).",
 )
 @app_commands.choices(
     model=[
-        app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["gptimg_models"]
+        app_commands.Choice(name=str(m), value=m)
+        for m in MODEL_CHOICES["gptimg_models"]
     ],
-    size=[app_commands.Choice(name=str(s), value=s) for s in MODEL_CHOICES["gptimg_sizes"]],
+    size=[
+        app_commands.Choice(name=str(s), value=s) for s in MODEL_CHOICES["gptimg_sizes"]
+    ],
     quality=[
-        app_commands.Choice(name=str(q), value=q) for q in MODEL_CHOICES["gptimg_quality"]
-    ],
-    output_format=[
-        app_commands.Choice(name=str(f), value=f) for f in MODEL_CHOICES["gptimg_formats"]
+        app_commands.Choice(name=str(q), value=q)
+        for q in MODEL_CHOICES["gptimg_quality"]
     ],
 )
 async def gptimg_command(
     interaction: discord.Interaction,
     prompt: str,
     edit_image1: discord.Attachment | None = None,
-    edit_image2: discord.Attachment | None = None,  # Now correctly handled
+    edit_image2: discord.Attachment | None = None,
+    edit_image3: discord.Attachment | None = None,  # Added more image slots
+    edit_image4: discord.Attachment | None = None,
+    edit_image5: discord.Attachment | None = None,
     mask_image: discord.Attachment | None = None,
     model: GPTImageModel = "gpt-image-1",
-    size: GPTImageSize = "1024x1024",
-    quality: GPTImageQuality = "standard",  # Used only for generation, not editing
-    output_format: GPTImageFormat = "png",  # Used only for generation
-) -> None:  # Function returns nothing (works with discord commands)
+    size: GPTImageSize = "auto",
+    quality: GPTImageQuality = "auto",
+    transparent_background: bool = False,  # Re-added transparency support
+) -> None:
     """
     Generates or edits images using OpenAI's GPT Image model.
+    Images are saved as PNG to support transparency features.
     - Text-to-image: Provide a prompt.
-    - Image editing: Provide prompt + edit_image1 (and optionally edit_image2).
+    - Image editing: Provide prompt + edit_image1 (and optionally up to 5 images total).
     - Masked editing: Provide prompt + edit_image1 + mask_image (mask applies to edit_image1).
     """
     await interaction.response.defer(ephemeral=False, thinking=True)
 
-    is_editing: bool = edit_image1 is not None
+    # Collect all provided edit images
+    edit_images: list[discord.Attachment] = [
+        img
+        for img in [edit_image1, edit_image2, edit_image3, edit_image4, edit_image5]
+        if img is not None
+    ]
+
+    is_editing: bool = len(edit_images) > 0
     operation_type: str = "editing" if is_editing else "generating"
     start_time: float = time.time()
 
@@ -673,46 +687,34 @@ async def gptimg_command(
         f"🖌️ {operation_type.capitalize()} your image with {model}...\n\n"
         f"⏳ This can take 30-90 seconds.\n\n"
         f"**Prompt:** {discord.utils.escape_markdown(prompt)}\n"
-        f"**Settings:** Size: {size}"
-        + (f" | Quality: {quality}" if not is_editing else "")
+        f"**Settings:** Size: {size} | Quality: {quality}"
+        + (f" | Images: {len(edit_images)}" if is_editing else "")
     )
+
     try:
         initial_message = await interaction.followup.send(progress_message_content)
     except discord.HTTPException as e:
         logger.exception(f"Failed to send initial progress message for gptimg: {e}")
-        return None  # Explicit return to satisfy mypy
+        return None
 
     operation_complete_event: asyncio.Event = asyncio.Event()
     update_task: asyncio.Task[None] | None = None
     generation_task: asyncio.Task[Path] | None = None
 
     try:
-        if is_editing:  # This implies edit_image1 is not None
-            # Validate and save edit_image1
-            if (
-                not edit_image1
-                or not edit_image1.content_type
-                or not edit_image1.content_type.startswith("image/")
-            ):
-                raise ValueError("edit_image1 is missing or not a valid image type.")
-            with tempfile.NamedTemporaryFile(
-                suffix=Path(edit_image1.filename).suffix or ".png", delete=False
-            ) as tmp_file1:
-                await edit_image1.save(Path(tmp_file1.name))
-                temp_image_paths.append(Path(tmp_file1.name))
-
-            # Validate and save edit_image2 if provided
-            if edit_image2:
-                if (
-                    not edit_image2.content_type
-                    or not edit_image2.content_type.startswith("image/")
+        if is_editing:
+            # Validate and save all edit images
+            for i, edit_img in enumerate(edit_images):
+                if not edit_img.content_type or not edit_img.content_type.startswith(
+                    "image/"
                 ):
-                    raise ValueError("edit_image2 is not a valid image type.")
+                    raise ValueError(f"edit_image{i+1} is not a valid image type.")
+
                 with tempfile.NamedTemporaryFile(
-                    suffix=Path(edit_image2.filename).suffix or ".png", delete=False
-                ) as tmp_file2:
-                    await edit_image2.save(Path(tmp_file2.name))
-                    temp_image_paths.append(Path(tmp_file2.name))
+                    suffix=Path(edit_img.filename).suffix or ".png", delete=False
+                ) as tmp_file:
+                    await edit_img.save(Path(tmp_file.name))
+                    temp_image_paths.append(Path(tmp_file.name))
 
             # Validate and save mask_image if provided
             if mask_image:
@@ -721,6 +723,7 @@ async def gptimg_command(
                     or not mask_image.content_type.startswith("image/")
                 ):
                     raise ValueError("mask_image is not a valid image type.")
+
                 with tempfile.NamedTemporaryFile(
                     suffix=Path(mask_image.filename).suffix or ".png", delete=False
                 ) as tmp_mask_file:
@@ -766,9 +769,10 @@ async def gptimg_command(
                     f"⏳ Elapsed: {minutes:02d}:{seconds:02d} • Est. Rem: {est_min:02d}:{est_sec:02d}\n"
                     f"Progress: {progress_bar} {progress_percentage:.0f}%\n\n"
                     f"**Prompt:** {discord.utils.escape_markdown(prompt)}\n"
-                    f"**Settings:** Size: {size}"
-                    + (f" | Quality: {quality}" if not is_editing else "")
+                    f"**Settings:** Size: {size} | Quality: {quality}"
+                    + (f" | Images: {len(edit_images)}" if is_editing else "")
                 )
+
                 try:
                     if initial_message:
                         await initial_message.edit(content=updated_content)
@@ -794,30 +798,22 @@ async def gptimg_command(
                 except Exception as e_wait:
                     logger.exception(f"gptimg: Error in update_progress wait: {e_wait}")
                     break
+
             logger.info(
                 f"gptimg: Progress update loop finished. Updates: {update_count}"
             )
-            return None  # Explicit return to satisfy mypy
+            return None
 
         update_task = asyncio.create_task(update_progress_periodically())
 
         if is_editing:
-            if not temp_image_paths:  # Should have at least edit_image1
-                raise ValueError(
-                    "Cannot perform edit operation without at least one input image."
-                )
             generation_task = asyncio.create_task(
                 services.edit_gpt_image(
                     prompt=prompt,
-                    images=temp_image_paths,  # Pass the list as Sequence[Path]
+                    images=temp_image_paths,
                     mask=temp_mask_path,
                     model=model,
-                    # Ensure size is compatible with edit API
-                    size=(
-                        cast("GPTImageEditSize", size)
-                        if size in {"1024x1024", "1024x1536", "1536x1024", "256x256", "512x512"}
-                        else "1024x1024"
-                    ),
+                    size=size,
                 )
             )
         else:  # Generating a new image
@@ -825,14 +821,9 @@ async def gptimg_command(
                 services.generate_gpt_image(
                     prompt=prompt,
                     model=model,
-                    # Ensure size is compatible with generation API
-                    size=(
-                        cast("GPTImageGenerationSize", size)
-                        if size in {"1024x1024", "1792x1024", "1024x1792"}
-                        else "1024x1024"
-                    ),
                     quality=quality,
-                    output_format=output_format,
+                    size=size,
+                    transparent_background=transparent_background,
                 )
             )
 
@@ -871,7 +862,7 @@ async def gptimg_command(
                         "gptimg: Update task did not finish cleanly after generation."
                     )
                     if not update_task.done():
-                        update_task.cancel()  # Ensure cancellation
+                        update_task.cancel()
                 except Exception as e_await_update:
                     logger.exception(
                         f"gptimg: Error awaiting update task: {e_await_update}"
@@ -891,9 +882,12 @@ async def gptimg_command(
         final_message_content: str = (
             f"✅ Image {operation_type} complete! (Took {mins}m {secs}s)\n\n"
             f"**Prompt:** {discord.utils.escape_markdown(prompt)}\n"
-            f"**Settings:** Model: {model} | Size: {size}"
-            + (f" | Quality: {quality}" if not is_editing else "")
+            f"**Settings:** Model: {model} | Size: {size} | Quality: {quality}"
+            + (f" | Images: {len(edit_images)}" if is_editing else "")
+            + (f" | Transparent: {transparent_background}" if not is_editing else "")
+            + f"\n**Format:** PNG (supports transparency)"
         )
+
         await interaction.followup.send(
             content=final_message_content, file=final_discord_file
         )
@@ -918,6 +912,7 @@ async def gptimg_command(
             f"❌ An unexpected error occurred: {e!s}", ephemeral=True
         )
     finally:
+        # Clean up temporary files
         for p in temp_image_paths:
             if p.exists():
                 try:
@@ -934,8 +929,8 @@ async def gptimg_command(
                     f"gptimg: Error deleting temp mask file {temp_mask_path}: {e_unlink}"
                 )
 
-        operation_complete_event.set()  # Ensure event is set for any lingering tasks
-        # Final check and cancellation for tasks
+        operation_complete_event.set()
+        # Final cleanup for any remaining tasks
         tasks_to_cancel = [
             t for t in [update_task, generation_task] if t and not t.done()
         ]
@@ -948,5 +943,4 @@ async def gptimg_command(
             except Exception as e_gather:
                 logger.exception(f"gptimg: Error during final task cleanup: {e_gather}")
 
-        # Explicitly return None to satisfy mypy
         return None
