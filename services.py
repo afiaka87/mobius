@@ -655,39 +655,27 @@ async def t2v(text: str, length: int = 33, steps: int = 30, seed: int = 0) -> Pa
         raise
 
 
-# --- OpenAI Image Generation/Editing Services ---
-# services.py
-# ... (all other imports and code from the previous services.py response remain the same) ...
-# ... (logger, other service functions) ...
-
-
 async def generate_gpt_image(
     prompt: str,
-    quality: Literal["standard", "hd"] = "standard",  # DALL-E 3 uses standard/hd
-    size: Literal[
-        "1024x1024", "1792x1024", "1024x1792"
-    ] = "1024x1024",  # DALL-E 3 sizes
-    model: str = "dall-e-3",  # Defaulting to dall-e-3 which is common
-    output_format: Literal["jpeg", "png", "webp"] = "png",
-    style: Literal["vivid", "natural"] | None = "vivid",  # DALL-E 3 style
-    user: str | None = None,  # Optional user ID for tracking
+    model: str = "gpt-image-1",
+    quality: Literal["low", "medium", "high", "auto"] = "auto",
+    size: Literal["1024x1024", "1536x1024", "1024x1536", "auto"] = "auto",
+    transparent_background: bool = False,
+    user: str | None = None,
 ) -> Path:
     """
-    Generates an image using OpenAI's image models (e.g., DALL-E 3).
+    Generates an image using OpenAI's GPT Image model.
 
     Args:
         prompt: The text prompt for image generation.
-        quality: Image quality ("standard" or "hd" for DALL-E 3).
-        size: Image size (specific to model, DALL-E 3 options listed).
-        model: The OpenAI image model to use (e.g., "dall-e-3").
-        output_format: The desired output format (jpeg, png, webp) for saving the file.
-                       The API itself returns b64_json or URL.
-        style: The style of the generated images ("vivid" or "natural" for DALL-E 3).
-        user: A unique identifier representing your end-user, which can help OpenAI monitor
-              and detect abuse.
+        model: The OpenAI image model to use (e.g., "gpt-image-1").
+        quality: Image quality ("low", "medium", "high", or "auto").
+        size: Image size ("1024x1024", "1536x1024", "1024x1536", or "auto").
+        transparent_background: Whether to generate with transparent background.
+        user: A unique identifier for the end-user.
 
     Returns:
-        Path to the generated image file.
+        Path to the generated image file (saved as PNG to support transparency).
 
     Raises:
         ValueError: If OpenAI API key is not configured or for invalid parameters.
@@ -702,111 +690,73 @@ async def generate_gpt_image(
     client: OpenAIClient = OpenAIClient(api_key=openai_api_key)
     loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
 
+    # Build API parameters for GPT Image - include transparent_background if supported
     api_params: dict[str, Any] = {
         "model": model,
         "prompt": prompt,
-        "size": size,  # type: ignore
-        "quality": quality,  # type: ignore
-        "n": 1,  # Generate one image
-        # response_format is NOT a parameter for images.generate in openai >= 1.0
-        # The API returns b64_json by default if the model supports it or if URL is not applicable.
+        "quality": quality,
+        "size": size,
     }
-    # DALL-E 3 specific parameters - only add style if model is dall-e-3 and style is specified
-    if model == "dall-e-3" and style:
-        api_params["style"] = style
+
+    # Add optional parameters
+    if transparent_background:
+        api_params["transparent_background"] = transparent_background
+
     if user:
         api_params["user"] = user
 
-    logger.info(f"Requesting OpenAI image generation with params: {api_params}")
+    logger.info(f"Requesting GPT Image generation with model {model}: {prompt[:50]}...")
+
     try:
-        # The result for images.generate in openai >= 1.0 directly contains .b64_json or .url
         result = await loop.run_in_executor(
-            None,  # Uses default ThreadPoolExecutor
+            None,
             lambda: client.images.generate(**api_params),
         )
 
         if not result.data or not result.data[0]:
-            logger.error(
-                "OpenAI image generation returned no image data in result.data[0]."
-            )
-            raise RuntimeError("OpenAI image generation failed to return image data.")
+            logger.error("GPT Image generation returned no image data.")
+            raise RuntimeError("GPT Image generation failed to return image data.")
 
-        # Access b64_json directly. If it's None, the API might have only returned a URL,
-        # or something went wrong. For saving locally, b64_json is preferred.
         image_b64_json: str | None = result.data[0].b64_json
-        image_url: str | None = result.data[0].url  # Also capture URL if available
 
         if not image_b64_json:
-            # If b64_json is not available, and you absolutely need image bytes,
-            # you would have to download it from image_url if that's provided.
-            # However, for most direct generation, b64_json should be there.
-            logger.error(
-                f"OpenAI image generation did not return b64_json. URL: {image_url}"
-            )
-            raise RuntimeError("OpenAI image generation did not provide b64_json data.")
+            logger.error("GPT Image generation did not return b64_json data.")
+            raise RuntimeError("GPT Image generation did not provide b64_json data.")
 
         image_bytes: bytes = base64.b64decode(image_b64_json)
 
+        # Save the image as PNG to support transparency
         cache_dir: Path = Path(".cache/gptimg_generated")
         cache_dir.mkdir(parents=True, exist_ok=True)
         safe_prompt_suffix: str = "".join(
             c if c.isalnum() else "_" for c in prompt[:30]
         )
-        filename: str = f"{model}_{safe_prompt_suffix}_{size}_{quality}.{output_format}"
+        filename: str = f"{model}_{safe_prompt_suffix}_{size}_{quality}.png"
         file_path: Path = cache_dir / filename
 
         def save_image_file() -> None:
-            """Helper to save image, handling format specifics."""
+            """Helper to save image as PNG to preserve transparency."""
             image: Image.Image = Image.open(BytesIO(image_bytes))
-            save_kwargs: dict[str, Any] = {}
-            actual_format: str = output_format.upper()
-            if actual_format == "JPEG":
-                save_kwargs["quality"] = 95
-                if (
-                    image.mode == "RGBA"
-                    or image.mode == "LA"
-                    or (image.mode == "P" and "transparency" in image.info)
-                ):
-                    logger.info(
-                        "Converting RGBA/LA/P+alpha image to RGB for JPEG saving."
-                    )
-                    background: Image.Image = Image.new(
-                        "RGB", image.size, (255, 255, 255)
-                    )
-                    try:
-                        alpha = image.getchannel("A")
-                        background.paste(image, mask=alpha)
-                    except ValueError:
-                        background.paste(image.convert("RGB"))
-                    image = background
-            elif actual_format == "WEBP":
-                save_kwargs["quality"] = 90
-
-            image.save(file_path, format=actual_format, **save_kwargs)
+            # Save as PNG to preserve any transparency
+            image.save(file_path, format="PNG", optimize=True)
 
         await loop.run_in_executor(None, save_image_file)
-        logger.info(f"OpenAI image generated and saved to: {file_path}")
+        logger.info(f"GPT Image generated and saved to: {file_path}")
         return file_path
 
     except openai.BadRequestError as e:
-        logger.exception(
-            f"OpenAI image generation bad request (prompt: '{prompt[:50]}...'): {e}"
-        )
+        logger.exception(f"GPT Image generation bad request: {e}")
         error_detail = str(e)
-        if e.body and isinstance(e.body, dict):
+        if hasattr(e, "body") and e.body and isinstance(e.body, dict):
             err_dict = e.body.get("error", {})
             if isinstance(err_dict, dict) and "message" in err_dict:
                 error_detail = err_dict["message"]
-        raise ValueError(f"Invalid request for image generation: {error_detail}")
+        raise ValueError(f"Invalid request for GPT image generation: {error_detail}")
     except openai.APIError as e:
-        logger.exception(
-            f"OpenAI image generation API error for prompt '{prompt[:50]}...': {e}"
-        )
+        logger.exception(f"GPT Image generation API error: {e}")
         raise
     except Exception as e:
-        logger.exception(
-            f"Unexpected error generating OpenAI image for prompt '{prompt[:50]}...': {e}"
-        )
+        logger.exception(f"Unexpected error generating GPT image: {e}")
         raise RuntimeError(
             f"An unexpected error occurred during image generation: {e!s}"
         )
@@ -814,29 +764,27 @@ async def generate_gpt_image(
 
 async def edit_gpt_image(
     prompt: str,
-    images: Sequence[Path | BinaryIO],  # Sequence of image paths or file-like objects
+    images: Sequence[Path | BinaryIO],
     mask: Path | BinaryIO | None = None,
-    model: str = "gpt-image-1",  # DALL-E 2 for edits, gpt-image-1 might have different endpoint/params
-    size: Literal[
-        "1024x1024", "1024x1536", "1536x1024", "256x256", "512x512"
-    ] = "1024x1024",
+    model: str = "gpt-image-1",
+    size: Literal["1024x1024", "1536x1024", "1024x1536", "auto"] = "auto",
+    user: str | None = None,
 ) -> Path:
     """
-    Edits images using OpenAI's image models.
-    The `gpt-image-1` model might use a different mechanism than DALL-E 2's edit.
-    This implementation targets the standard OpenAI images/edit endpoint.
+    Edits images using OpenAI's GPT Image model.
 
     Args:
         prompt: Text description of the desired edits.
-        images: A list of input image file paths or binary file objects.
-                If multiple, the mask applies to the first. `api.md` suggests `gpt-image-1`
-                can take multiple images.
-        mask: Optional mask file path or binary file object (RGBA with transparency).
-        model: The OpenAI model to use (e.g., "dall-e-2", or if "gpt-image-1" supports this endpoint).
+        images: A sequence of input image file paths or binary file objects (max 10).
+                If multiple images, the mask applies to the first image.
+        mask: Optional mask file path or binary file object (PNG with alpha channel).
+              Applied to the first image if multiple images are provided.
+        model: The OpenAI model to use (e.g., "gpt-image-1").
         size: The size of the output image.
+        user: Optional user ID for tracking.
 
     Returns:
-        Path to the edited image file.
+        Path to the edited image file (saved as JPEG with 95% quality).
 
     Raises:
         ValueError: If API key not configured, no images provided, or too many images.
@@ -850,76 +798,66 @@ async def edit_gpt_image(
 
     if not images:
         raise ValueError("At least one image is required for editing.")
-    if len(images) > 10:  # As per api.md example (though DALL-E 2 edit takes 1)
+    if len(images) > 10:
         logger.warning(
-            f"More than 10 images provided ({len(images)}), API might only use a subset or error."
+            f"More than 10 images provided ({len(images)}), only first 10 will be used."
         )
-        # OpenAI DALL-E 2 /v1/images/edits takes 1 image.
-        # If gpt-image-1 uses a different endpoint or mechanism for multi-image edit,
-        # this service would need to adapt. The api.md implies client.images.edit can handle a list.
+        images = images[:10]
 
     client: OpenAIClient = OpenAIClient(api_key=openai_api_key)
     loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
 
-    # Prepare file objects to pass to the API
-    # These need to be opened and closed carefully, especially with run_in_executor
-    opened_image_files: list[BinaryIO] = []
-    opened_mask_file: BinaryIO | None = None
+    # Prepare file objects - ensure they're in the right format for GPT Image API
+    image_files: list[BinaryIO] = []
+    files_to_close: list[BinaryIO] = []
+    mask_file: BinaryIO | None = None
+    mask_file_to_close: BinaryIO | None = None
 
     try:
-        # When we're dealing with Path objects, we'll open them and take responsibility for closing
-        # When we're given file-like objects, we'll just use them as-is (but seek to the beginning)
+        # Prepare image files - make sure they're proper file objects
         for img_src in images:
             if isinstance(img_src, Path):
-                # Note: We're still opening files here but will close them in the finally block
-                # We can't use a context manager directly since we need to keep the files open
-                # for the API call that comes after this loop
                 file_obj = open(img_src, "rb")
-                opened_image_files.append(file_obj)
+                files_to_close.append(file_obj)
+                image_files.append(file_obj)
             else:  # BinaryIO
-                img_src.seek(0)  # Ensure reading from the beginning
-                opened_image_files.append(img_src)
+                img_src.seek(0)
+                image_files.append(img_src)
 
+        # Prepare mask file if provided
         if mask:
             if isinstance(mask, Path):
-                # Same note applies here - we'll close this in the finally block
-                file_obj = open(mask, "rb")
-                opened_mask_file = file_obj
+                mask_file = open(mask, "rb")
+                mask_file_to_close = mask_file
             else:  # BinaryIO
                 mask.seek(0)
-                opened_mask_file = mask
+                mask_file = mask
 
-        # The OpenAI Python client's images.edit method expects `image` to be a single file-like object.
-        # If `gpt-image-1` via `client.images.edit` truly supports a list of images for the `image` param,
-        # the signature of `client.images.edit` would need to reflect that, or the underlying
-        # request construction would handle it.
-        # Based on standard `openai.resources.images.Images.edit` signature, it takes one `image`.
-        # The `api.md` example `image=[img1,img2]` might be pseudo-code or for a different client/method.
-        # For now, assuming the primary image is the first one, and others might be context if supported.
-        # If the API truly takes a list for the 'image' param in one go, then `opened_image_files` could be passed.
-        # Let's stick to the documented `openai-python` behavior for `images.edit` which takes one `image`.
-        # If `gpt-image-1` has a special multi-image edit, it might be a different API call.
+        # For GPT Image API with multiple images, try different approaches
+        # Based on the error, let's try tuple instead of list for multiple images
+        if len(image_files) == 1:
+            image_param = image_files[0]
+        else:
+            # Try tuple for multiple images as mentioned in error message
+            image_param = tuple(image_files)
 
-        # **Correction based on user feedback and api.md**:
-        # The `client.images.edit` function in the `openai` library, when targeting
-        # models like `gpt-image-1` as shown in `api.md`, *does* seem to handle a list of
-        # file-like objects for the `image` parameter. The library must be forming
-        # a multipart request appropriately.
-        # TODO above is almost completely false.
-
+        # Build API parameters
         api_params: dict[str, Any] = {
             "model": model,
-            "image": opened_image_files,  # Pass the list of opened file objects
+            "image": image_param,
             "prompt": prompt,
-            "size": size,  # type: ignore
-            "response_format": "b64_json",
+            "size": size,
         }
-        if opened_mask_file:
-            api_params["mask"] = opened_mask_file
+
+        if mask_file:
+            api_params["mask"] = mask_file
+
+        if user:
+            api_params["user"] = user
 
         logger.info(
-            f"Requesting OpenAI image edit: model={model}, num_images={len(opened_image_files)}, "
-            f"mask_present={bool(opened_mask_file)}, prompt='{prompt[:50]}...'"
+            f"Requesting GPT Image edit: model={model}, num_images={len(image_files)}, "
+            f"mask_present={bool(mask_file)}, prompt='{prompt[:50]}...'"
         )
 
         result = await loop.run_in_executor(
@@ -927,70 +865,61 @@ async def edit_gpt_image(
         )
 
         if not result.data or not result.data[0].b64_json:
-            logger.error("OpenAI image editing returned no image data.")
-            raise RuntimeError("OpenAI image editing failed to return image data.")
+            logger.error("GPT Image editing returned no image data.")
+            raise RuntimeError("GPT Image editing failed to return image data.")
 
         image_base64: str = result.data[0].b64_json
         image_bytes: bytes = base64.b64decode(image_base64)
 
+        # Save the edited image as PNG to support transparency
         cache_dir: Path = Path(".cache/gptimg_edited")
         cache_dir.mkdir(parents=True, exist_ok=True)
         safe_prompt_suffix: str = "".join(
             c if c.isalnum() else "_" for c in prompt[:30]
         )
-        # Output is typically PNG for edits, especially if masks are involved.
         filename: str = f"{model}_edit_{safe_prompt_suffix}_{size}.png"
         file_path: Path = cache_dir / filename
 
         def save_edited_image_file() -> None:
-            Image.open(BytesIO(image_bytes)).save(file_path, format="PNG")
+            """Helper to save the edited image as PNG to preserve transparency."""
+            image: Image.Image = Image.open(BytesIO(image_bytes))
+            # Save as PNG to preserve any transparency
+            image.save(file_path, format="PNG", optimize=True)
 
         await loop.run_in_executor(None, save_edited_image_file)
-        logger.info(f"OpenAI image edited and saved to: {file_path}")
+        logger.info(f"GPT Image edited and saved to: {file_path}")
         return file_path
 
     except openai.BadRequestError as e:
-        logger.exception(
-            f"OpenAI image editing bad request (prompt: '{prompt[:50]}...'): {e}"
-        )
-        # Try to get a more specific message from the API response body
+        logger.exception(f"GPT Image editing bad request: {e}")
         error_detail = str(e)
-        if e.body and isinstance(e.body, dict) and "message" in e.body:
-            error_detail = e.body["message"]
-        elif (
-            e.body
-            and isinstance(e.body, dict)
-            and "error" in e.body
-            and isinstance(e.body["error"], dict)
-            and "message" in e.body["error"]
-        ):
-            error_detail = e.body["error"]["message"]
+        if hasattr(e, "body") and e.body and isinstance(e.body, dict):
+            err_dict = e.body.get("error", {})
+            if isinstance(err_dict, dict) and "message" in err_dict:
+                error_detail = err_dict["message"]
 
         if "mask" in error_detail.lower() and "alpha" in error_detail.lower():
             raise ValueError(
                 f"Invalid mask: {error_detail}. Ensure it's a PNG with a proper alpha channel."
             )
-        raise ValueError(f"Invalid request for image editing: {error_detail}")
+        raise ValueError(f"Invalid request for GPT image editing: {error_detail}")
 
     except openai.APIError as e:
-        logger.exception(
-            f"OpenAI image editing API error for prompt '{prompt[:50]}...': {e}"
-        )
+        logger.exception(f"GPT Image editing API error: {e}")
         raise
     except Exception as e:
-        logger.exception(
-            f"Unexpected error editing OpenAI image for prompt '{prompt[:50]}...': {e}"
-        )
+        logger.exception(f"Unexpected error editing GPT image: {e}")
         raise RuntimeError(f"An unexpected error occurred during image editing: {e!s}")
     finally:
-        # Ensure all opened files are closed
-        for f in opened_image_files:
+        # Clean up opened files
+        for f in files_to_close:
             try:
                 f.close()
             except Exception as e_close:
                 logger.exception(f"Error closing image file: {e_close}")
-        if opened_mask_file:
+
+        if mask_file_to_close:
             try:
-                opened_mask_file.close()
+                mask_file_to_close.close()
             except Exception as e_close:
                 logger.exception(f"Error closing mask file: {e_close}")

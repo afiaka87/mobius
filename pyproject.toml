@@ -33,6 +33,7 @@ dependencies = [
     "httpx>=0.27.0",
     "comfy-api-simplified", # Added based on usage in services.py (ensure version if critical)
     "Pillow>=10.0.0", # For PIL.Image, used in services.py and utils.py
+    "psutil>=7.0.0",
 ]
 
 [project.urls]
