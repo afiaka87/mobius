@@ -17,14 +17,16 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-import commands as my_bot_commands  # Renamed to avoid collision with discord.ext.commands
+# Renamed to avoid collision with discord.ext.commands
+import commands as my_bot_commands
 
 # Load environment variables from .env file
 # It's good practice to call this early, before other modules might need env vars.
 load_dotenv()
 
 # Set up logging
-# Basic configuration is set here. For more complex setups, consider a dedicated logging config.
+# Basic configuration is set here.
+# For more complex setups, consider a dedicated logging config.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -37,7 +39,8 @@ intents: discord.Intents = discord.Intents.default()
 intents.message_content = True  # Required for commands that read message content
 
 # Initialize bot
-# The command_prefix is for legacy message-based commands, not strictly needed for slash commands.
+# The command_prefix is for legacy message-based commands,
+# not strictly needed for slash commands.
 bot: commands.Bot = commands.Bot(command_prefix="!", intents=intents)
 
 
@@ -62,9 +65,7 @@ def register_all_commands(client: commands.Bot) -> None:
 
     for module in command_modules:
         for name, obj in inspect.getmembers(module):
-            if isinstance(obj, app_commands.Command) or isinstance(
-                obj, app_commands.ContextMenu
-            ):
+            if isinstance(obj, app_commands.Command | app_commands.ContextMenu):
                 logger.info(
                     f"Adding app command: {obj.name} from module {module.__name__}"
                 )
@@ -72,13 +73,19 @@ def register_all_commands(client: commands.Bot) -> None:
                 registered_command_count += 1
             # Optional: Log skipped members if needed for debugging
             # else:
-            #     logger.debug(f"Skipping {name} in {module.__name__} (not a command object).")
+            #     logger.debug(f"Skipping {name} in {module.__name__} "
+    #                  f"(not a command object).")
 
     if registered_command_count == 0:
         logger.error("No application commands were found or registered.")
-        # Depending on desired behavior, this could raise an error or just log a warning.
+
+        # Depending on desired behavior, this could raise an error or just log a warning
         # For now, raising an error as it likely indicates a setup problem.
-        raise RuntimeError("No application commands registered. Check command modules.")
+        # Create a custom exception class for better error handling
+        class CommandRegistrationError(RuntimeError):
+            """Raised when no commands could be registered."""
+
+        raise CommandRegistrationError("No application commands registered")
 
     logger.info(
         f"Successfully registered {registered_command_count} application commands."
@@ -105,9 +112,14 @@ async def sync_commands_to_guilds(client: commands.Bot) -> None:
             "DISCORD_GUILD_IDS environment variable not set or empty. "
             "Cannot sync commands to specific guilds."
         )
+
         # Depending on requirements, you might want to fall back to global sync
         # or raise an error. For now, raising an error.
-        raise ValueError("DISCORD_GUILD_IDS environment variable is required.")
+        # Define a custom exception for configuration errors
+        class ConfigError(ValueError):
+            """Raised when required configuration is missing."""
+
+        raise ConfigError("DISCORD_GUILD_IDS environment variable is required")
 
     guild_id_list: list[str] = [gid.strip() for gid in guild_ids_str.split(",")]
     discord_guild_objects: list[discord.Object] = []
@@ -135,7 +147,7 @@ async def sync_commands_to_guilds(client: commands.Bot) -> None:
             # Optionally re-raise or handle specific HTTP error codes
             raise
         except Exception as e:
-            logger.error(
+            logger.exception(
                 f"An unexpected error occurred while syncing to guild {guild.id}: {e}"
             )
             raise
@@ -177,7 +189,7 @@ async def on_ready() -> None:
         await bot.change_presence(status=discord.Status.invisible)
         logger.info("Bot presence set to invisible.")
     except Exception as e:
-        logger.error(f"Failed to set bot presence: {e}")
+        logger.exception(f"Failed to set bot presence: {e}")
 
 
 def main() -> None:
