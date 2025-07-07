@@ -13,6 +13,7 @@ import imghdr  # For determining image type from bytes
 import io
 import logging
 import mimetypes  # For guessing MIME type from file extension
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -20,9 +21,15 @@ import cv2
 import discord
 import httpx
 import numpy as np
-from moviepy.editor import AudioFileClip, ImageSequenceClip
+
+# Suppress SyntaxWarnings from moviepy and pydub libraries (invalid escape sequences)
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=SyntaxWarning, module="moviepy.*")
+    warnings.filterwarnings("ignore", category=SyntaxWarning, module="pydub.*")
+    from moviepy.editor import AudioFileClip, ImageSequenceClip
+    from pydub import AudioSegment
+
 from PIL import Image
-from pydub import AudioSegment
 from scipy.ndimage import gaussian_filter1d
 
 logger: logging.Logger = logging.getLogger(__name__)

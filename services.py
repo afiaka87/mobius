@@ -220,7 +220,6 @@ def _format_anthropic_message(msg: AnthropicMessage) -> str:
 async def anthropic_chat_completion(
     prompt: str,
     max_tokens: int = 1024,
-    max_uses: int = 1,  # For web_search tool
     model: str = "claude-3-5-sonnet-20240620",
 ) -> str:
     """
@@ -229,7 +228,6 @@ async def anthropic_chat_completion(
     Args:
         prompt: The user's prompt.
         max_tokens: The maximum number of tokens to generate.
-        max_uses: Maximum uses for the web_search tool.
         model: The Anthropic model to use.
 
     Returns:
@@ -247,22 +245,6 @@ async def anthropic_chat_completion(
     # Client automatically picks up ANTHROPIC_API_KEY from env
     anthropic_client: AsyncAnthropic = AsyncAnthropic()
 
-    tool_config: AnthropicToolParam = cast(
-        "AnthropicToolParam",
-        {
-            "type": "web_search_20250305",  # Using the specified tool type
-            "name": "web_search",
-            "max_uses": max_uses,
-            "user_location": {  # Optional: provide user location context
-                "type": "approximate",
-                "city": "Fayetteville",
-                "region": "Arkansas",
-                "country": "US",
-                "timezone": "America/Chicago",
-            },
-        },
-    )
-
     logger.info(
         f"Requesting Anthropic completion: model={model}, prompt='{prompt[:50]}...'"
     )
@@ -271,10 +253,6 @@ async def anthropic_chat_completion(
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
             model=model,
-            tools=(
-                [tool_config] if max_uses > 0 else AnthropicNotGiven()
-            ),  # Only include tool if useful
-            # extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}, # If needed
         )
         formatted_message: str = _format_anthropic_message(message)
         logger.info(f"Anthropic completion successful for model {model}.")
@@ -833,18 +811,15 @@ async def edit_gpt_image(
                 mask.seek(0)
                 mask_file = mask
 
-        # For GPT Image API with multiple images, try different approaches
-        # Based on the error, let's try tuple instead of list for multiple images
-        if len(image_files) == 1:
-            image_param = image_files[0]
-        else:
-            # Try tuple for multiple images as mentioned in error message
-            image_param = tuple(image_files)
-
-        # Build API parameters
+        # OpenAI's image edit API only supports a single image, not multiple images
+        # Use the first image if multiple are provided
+        if len(image_files) > 1:
+            logger.warning(f"GPT Image edit API only supports single image, using first of {len(image_files)} provided")
+        
+        # Build API parameters with single image
         api_params: dict[str, Any] = {
             "model": model,
-            "image": image_param,
+            "image": image_files[0],  # Always use the first (and typically only) image
             "prompt": prompt,
             "size": size,
         }

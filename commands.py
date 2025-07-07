@@ -306,7 +306,6 @@ async def anthropic_command(
     interaction: discord.Interaction,
     prompt: str,
     max_tokens: app_commands.Range[int, 1, 4096] = 1024,  # Adjusted max_tokens
-    max_tool_uses: app_commands.Range[int, 0, 10] = 1,  # For web_search tool
     suppress_embeds: bool = True,
     model: AnthropicModel = "claude-3-5-sonnet-20240620",
 ) -> None:
@@ -314,7 +313,7 @@ async def anthropic_command(
     await interaction.response.defer(ephemeral=False, thinking=True)
     try:
         message_text: str = await services.anthropic_chat_completion(
-            prompt=prompt, max_tokens=max_tokens, max_uses=max_tool_uses, model=model
+            prompt=prompt, max_tokens=max_tokens, model=model
         )
 
         # Format with escaped prompt for safety
@@ -683,18 +682,34 @@ async def gptimg_command(
     generated_image_path: Path | None = None
 
     initial_message: discord.WebhookMessage | None = None
+    
+    # Check if the message will exceed Discord's 2000 character limit
+    escaped_prompt = discord.utils.escape_markdown(prompt)
     progress_message_content: str = (
         f"🖌️ {operation_type.capitalize()} your image with {model}...\n\n"
         f"⏳ This can take 30-90 seconds.\n\n"
-        f"**Prompt:** {discord.utils.escape_markdown(prompt)}\n"
+        f"**Prompt:** {escaped_prompt}\n"
         f"**Settings:** Size: {size} | Quality: {quality}"
         + (f" | Images: {len(edit_images)}" if is_editing else "")
     )
+    
+    # Check length and provide clear error if too long
+    if len(progress_message_content) > 2000:
+        error_msg = (
+            "❌ **Error:** Your prompt is too long for Discord messages.\n"
+            f"Current length: {len(escaped_prompt)} characters\n"
+            f"Maximum allowed: ~{2000 - len(progress_message_content) + len(escaped_prompt)} characters\n\n"
+            "Please shorten your prompt and try again."
+        )
+        await interaction.followup.send(error_msg)
+        return None
 
     try:
         initial_message = await interaction.followup.send(progress_message_content)
     except discord.HTTPException as e:
         logger.exception(f"Failed to send initial progress message for gptimg: {e}")
+        error_msg = "❌ **Error:** Failed to send progress message. Your prompt may be too long."
+        await interaction.followup.send(error_msg)
         return None
 
     operation_complete_event: asyncio.Event = asyncio.Event()
@@ -730,9 +745,9 @@ async def gptimg_command(
                     await mask_image.save(Path(tmp_mask_file.name))
                     temp_mask_path = Path(tmp_mask_file.name)
 
-        max_generation_time_seconds: Final[int] = 180
+        max_generation_time_seconds: Final[int] = 300
         progress_update_interval_seconds: Final[int] = 3
-        estimated_completion_time_seconds: Final[int] = 90
+        estimated_completion_time_seconds: Final[int] = 120
 
         async def update_progress_periodically() -> None:
             nonlocal initial_message
