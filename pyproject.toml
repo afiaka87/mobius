@@ -22,18 +22,22 @@ dependencies = [
     "anthropic>=0.42.0",
     "discord-py>=2.4.0",
     "fal-client>=0.5.6",
+    "fastapi>=0.104.0",
     "moviepy==1.0.3", # Consider if specific version is strictly needed or if >= is okay
     "nest-asyncio>=1.6.0",
     "openai>=1.59.7",
     "opencv-python>=4.10.0.84",
     "pydub>=0.25.1",
     "python-dotenv>=1.0.1",
+    "python-multipart>=0.0.5",
     # "python-weather>=2.0.7", # This was commented out in services.py, confirm if still needed
     "scipy>=1.15.1",
     "httpx>=0.27.0",
     "comfy-api-simplified", # Added based on usage in services.py (ensure version if critical)
     "Pillow>=10.0.0", # For PIL.Image, used in services.py and utils.py
     "psutil>=7.0.0",
+    "uvicorn>=0.24.0",
+    "pytest>=8.3.5",
 ]
 
 [project.urls]
@@ -48,6 +52,7 @@ mobius_bot = "bot:main" # Assuming bot.py will have a main() function for this
 dev = [
     "ruff>=0.5.0",
     "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
     "mypy>=1.10.0",
     # types-Pillow = ">=10.0.0"
     # types-PyYAML = "..."
