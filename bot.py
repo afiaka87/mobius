@@ -153,6 +153,16 @@ async def sync_commands_to_guilds(client: commands.Bot) -> None:
             raise
 
 
+# Add command error handler for debugging
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+    """Handle application command errors."""
+    logger.error(f"Command error: {error} for command: {interaction.command.name if interaction.command else 'Unknown'}")
+    if interaction.response.is_done():
+        await interaction.followup.send(f"An error occurred: {error}", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"An error occurred: {error}", ephemeral=True)
+
 @bot.event
 async def on_ready() -> None:
     """
