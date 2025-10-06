@@ -38,6 +38,9 @@ dependencies = [
     "psutil>=7.0.0",
     "uvicorn>=0.24.0",
     "pytest>=8.3.5",
+    "thefuzz[speedup]>=0.22.1", # Added for media search fuzzy matching
+    "mypy>=1.15.0",
+    "ruff>=0.11.10",
 ]
 
 [project.urls]
@@ -63,7 +66,9 @@ dev = [
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
-backend-path = ["."] # This is often not needed if pyproject.toml is at the root
+
+[tool.setuptools]
+py-modules = ["bot", "commands", "services", "utils", "autocomplete", "views", "test_api"]
 
 [tool.ruff]
 line-length = 120
