@@ -5,6 +5,16 @@ A discord bot by/for Clay. Currently a work-in-progress. Not really meant for pu
 
 ## Installation
 
+### Using `uv` (preferred)
+
+```bash
+git clone https://github.com/afiaka87/mobius.git
+cd mobius
+uv sync
+```
+
+### Using pip
+
 ```bash
 git clone https://github.com/afiaka87/mobius.git
 cd mobius
@@ -26,7 +36,11 @@ export YOUTUBE_API_KEY=
 
 Then run the bot:
 ```bash
-(venv) python3 main.py
+# With uv
+uv run python bot.py
+
+# With pip/venv
+(.venv) python bot.py
 ```
 
 ## Usage
