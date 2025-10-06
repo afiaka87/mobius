@@ -57,3 +57,16 @@ dist/
 
 # Type checker (mypy)
 .mypy_cache/
+
+# Model files and directories
+*.pt
+celeste-sd/
+glide-finetune/
+glide_model_cache/
+
+# Trash directory
+.trash/
+
+# Documentation (project-specific)
+CLAUDE.md
+API.md
