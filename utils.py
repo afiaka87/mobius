@@ -13,16 +13,24 @@ import imghdr  # For determining image type from bytes
 import io
 import logging
 import mimetypes  # For guessing MIME type from file extension
-from datetime import datetime
+import warnings
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import cv2
 import discord
 import httpx
 import numpy as np
-from moviepy.editor import AudioFileClip, ImageSequenceClip
+
+# Suppress SyntaxWarnings from moviepy and pydub libraries (invalid escape sequences)
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=SyntaxWarning, module="moviepy.*")
+    warnings.filterwarnings("ignore", category=SyntaxWarning, module="pydub.*")
+    from moviepy.editor import AudioFileClip, ImageSequenceClip
+    from pydub import AudioSegment
+
 from PIL import Image
-from pydub import AudioSegment
 from scipy.ndimage import gaussian_filter1d
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -260,6 +268,76 @@ def download_image(image_url: str, save_dir: Path = TEMP_FILE_DIR) -> Path:
         logger.exception(
             f"HTTP error downloading image {image_url}: {e.response.status_code}"
         )
+        raise DownloadError(f"HTTP error: {e.response.status_code}")
+    except httpx.InvalidURL:
+        logger.exception(f"Invalid URL provided: {image_url}")
+        raise InvalidURLError(f"Invalid URL: {image_url}")
+    except Exception as e:
+        logger.exception(f"Error downloading or saving image from {image_url}")
+        raise DownloadError(f"Download failed: {e!s}")
+
+
+async def download_image_async(image_url: str, save_dir: Path = TEMP_FILE_DIR) -> Path:
+    """
+    Async version of download_image.
+    Downloads an image from a URL and saves it to a specified directory.
+
+    Args:
+        image_url: The URL of the image to download.
+        save_dir: The directory where the image will be saved.
+
+    Returns:
+        The Path object of the saved image file.
+
+    Raises:
+        DownloadError: If the download fails for any reason.
+        InvalidURLError: If the URL is invalid.
+    """
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate a somewhat unique filename from the URL or use a timestamp
+    try:
+        url_path = Path(httpx.URL(image_url).path)
+        base_filename = (
+            url_path.stem
+            if url_path.stem
+            else f"image_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+        )
+    except httpx.InvalidURL:
+        logger.warning(f"Invalid URL format for base filename: {image_url}")
+        base_filename = f"image_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(image_url, follow_redirects=True)
+            response.raise_for_status()
+            image_bytes = response.content
+
+            # Try to determine the content type from the response headers
+            content_type_header = response.headers.get("content-type", "")
+            detected_type = ""
+
+            if "image/" in content_type_header:
+                detected_type = content_type_header.split("image/")[1].split(";")[0]
+            else:
+                # Try to determine from the image content
+                detected_type_from_content = imghdr.what(None, h=image_bytes)
+                detected_type = detected_type_from_content if detected_type_from_content else ""
+                if not detected_type:
+                    logger.warning(f"Unable to determine image file type for URL: {image_url}")
+                    # Default to jpg if we can't determine type
+                    detected_type = "jpg"
+
+            # Sanitize detected_type if it contains characters not suitable for extension
+            sanitized_type = "".join(c for c in detected_type if c.isalnum())
+            save_path = save_dir / f"{base_filename}.{sanitized_type}"
+
+            with open(save_path, "wb") as file:
+                file.write(image_bytes)
+            logger.info(f"Image downloaded from {image_url} and saved as {save_path}")
+            return save_path
+    except httpx.HTTPStatusError as e:
+        logger.exception(f"HTTP error downloading image {image_url}: {e.response.status_code}")
         raise DownloadError(f"HTTP error: {e.response.status_code}")
     except httpx.InvalidURL:
         logger.exception(f"Invalid URL provided: {image_url}")
@@ -551,3 +629,115 @@ def convert_audio_to_waveform_video(
     except Exception:
         logger.exception(f"Error converting audio {audio_file_path} to video")
         raise AudioProcessingError("Failed to convert audio to waveform video")
+
+
+# --- Obscast-specific Utility Functions ---
+
+def format_duration(seconds: float | None) -> str:
+    """Formats a duration in seconds into a human-readable HH:MM:SS string."""
+    if seconds is None or seconds < 0:
+        return "N/A"
+    delta = timedelta(seconds=int(seconds))
+    return str(delta)
+
+
+def format_file_size(size_bytes: int) -> str:
+    """Formats a file size in bytes into a human-readable string (KB, MB, GB)."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    size_kb = size_bytes / 1024
+    if size_kb < 1024:
+        return f"{size_kb:.2f} KB"
+    size_mb = size_kb / 1024
+    if size_mb < 1024:
+        return f"{size_mb:.2f} MB"
+    size_gb = size_mb / 1024
+    return f"{size_gb:.2f} GB"
+
+
+def truncate_text(text: str, max_length: int) -> str:
+    """Truncates text to a maximum length, adding an ellipsis if needed."""
+    return text if len(text) <= max_length else text[: max_length - 3] + "..."
+
+
+# --- Embed Creation Utilities for Obscast ---
+
+BOT_COLOR = 0x5865F2  # Discord blurple
+ERROR_COLOR = 0xED4245  # Discord red
+SUCCESS_COLOR = 0x57F287  # Discord green
+
+
+def create_error_embed(message: str, title: str = "❌ An Error Occurred") -> discord.Embed:
+    """Creates a standardized error embed."""
+    return discord.Embed(title=title, description=message, color=ERROR_COLOR)
+
+
+def create_success_embed(message: str, title: str = "✅ Success") -> discord.Embed:
+    """Creates a standardized success embed."""
+    return discord.Embed(title=title, description=message, color=SUCCESS_COLOR)
+
+
+def create_now_playing_embed(current: dict[str, Any], queue: dict[str, Any]) -> discord.Embed:
+    """Creates the rich embed for the '/now' command."""
+    media_file = current.get("media_file")
+    if not media_file:
+        return create_error_embed("Nothing is currently playing.")
+
+    title = media_file.get("display_name") or media_file.get("name", "Unknown Media")
+    status = "▶️ Playing" if current.get("is_playing") else "⏸️ Paused"
+
+    embed = discord.Embed(title=title, description=status, color=BOT_COLOR)
+
+    # Progress Bar
+    position = current.get("position", 0.0)
+    duration = current.get("duration", 0.0)
+    progress_bar = "─" * 20
+    if duration > 0:
+        percent = position / duration
+        filled_blocks = int(percent * 20)
+        progress_bar = "█" * filled_blocks + "─" * (20 - filled_blocks)
+
+    progress_str = f"`{format_duration(position)}` {progress_bar} `{format_duration(duration)}`"
+    embed.add_field(name="Progress", value=progress_str, inline=False)
+
+    # Queue Info
+    queue_items = queue.get("items", [])
+    if queue_items:
+        next_up_file = queue_items[0].get("media_file", {})
+        next_up_title = next_up_file.get("display_name") or next_up_file.get("name", "N/A")
+        queue_count = len(queue_items)
+        embed.add_field(name="Next Up", value=truncate_text(next_up_title, 100), inline=True)
+        embed.add_field(name="Queue", value=f"{queue_count} item(s)", inline=True)
+
+    embed.set_footer(text=f"Media ID: {media_file['id']}")
+    started_at = current.get("started_at")
+    embed.timestamp = datetime.fromisoformat(started_at) if started_at else discord.utils.utcnow()
+
+    return embed
+
+
+def create_search_results_embed(results: list[dict[str, Any]], query: str, page: int, per_page: int) -> discord.Embed:
+    """Creates a paginated embed for media search results."""
+    start_index = page * per_page
+    end_index = start_index + per_page
+    page_results = results[start_index:end_index]
+
+    embed = discord.Embed(
+        title=f"🔎 Search Results for '{query}'",
+        description=f"Showing results {start_index + 1}-{min(end_index, len(results))} of {len(results)}",
+        color=BOT_COLOR,
+    )
+
+    if not page_results:
+        embed.description = "No results found on this page."
+        return embed
+
+    for i, media in enumerate(page_results, start=start_index + 1):
+        name = media.get("display_name") or media.get("name", "Unknown")
+        duration = format_duration(media.get("metadata", {}).get("duration"))
+        size = format_file_size(media.get("size", 0))
+
+        field_value = f"**Duration:** {duration} | **Size:** {size}\n`ID: {media['id']}`"
+        embed.add_field(name=f"#{i}. {truncate_text(name, 200)}", value=field_value, inline=False)
+
+    return embed

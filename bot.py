@@ -153,6 +153,16 @@ async def sync_commands_to_guilds(client: commands.Bot) -> None:
             raise
 
 
+# Add command error handler for debugging
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+    """Handle application command errors."""
+    logger.error(f"Command error: {error} for command: {interaction.command.name if interaction.command else 'Unknown'}")
+    if interaction.response.is_done():
+        await interaction.followup.send(f"An error occurred: {error}", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"An error occurred: {error}", ephemeral=True)
+
 @bot.event
 async def on_ready() -> None:
     """
@@ -170,7 +180,10 @@ async def on_ready() -> None:
     logger.info("Registering commands...")
     try:
         register_all_commands(bot)
-        logger.info("Commands registered. Syncing to guilds...")
+        logger.info("Commands registered. Syncing globally first...")
+        # Try global sync first
+        await bot.tree.sync()
+        logger.info("Global sync complete. Now syncing to guilds...")
         await sync_commands_to_guilds(bot)
         logger.info("Slash commands synced! Bot is ready.")
     except RuntimeError as e:

@@ -16,17 +16,12 @@ import random
 from collections.abc import Sequence
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, Literal, cast
+from typing import Any, BinaryIO, Literal
 
 import fal_client
 import httpx
 import openai  # Main openai client
 from anthropic import AsyncAnthropic  # Separate client for Anthropic
-from anthropic._types import NotGiven as AnthropicNotGiven
-
-if TYPE_CHECKING:
-    from anthropic.types.messages.tool_param import ToolParam as AnthropicToolParam
-
 from anthropic.types import Message as AnthropicMessage  # Alias to avoid confusion
 from openai import OpenAI as OpenAIClient  # Explicitly alias for clarity
 from PIL import Image
@@ -220,7 +215,6 @@ def _format_anthropic_message(msg: AnthropicMessage) -> str:
 async def anthropic_chat_completion(
     prompt: str,
     max_tokens: int = 1024,
-    max_uses: int = 1,  # For web_search tool
     model: str = "claude-3-5-sonnet-20240620",
 ) -> str:
     """
@@ -229,7 +223,6 @@ async def anthropic_chat_completion(
     Args:
         prompt: The user's prompt.
         max_tokens: The maximum number of tokens to generate.
-        max_uses: Maximum uses for the web_search tool.
         model: The Anthropic model to use.
 
     Returns:
@@ -247,22 +240,6 @@ async def anthropic_chat_completion(
     # Client automatically picks up ANTHROPIC_API_KEY from env
     anthropic_client: AsyncAnthropic = AsyncAnthropic()
 
-    tool_config: AnthropicToolParam = cast(
-        "AnthropicToolParam",
-        {
-            "type": "web_search_20250305",  # Using the specified tool type
-            "name": "web_search",
-            "max_uses": max_uses,
-            "user_location": {  # Optional: provide user location context
-                "type": "approximate",
-                "city": "Fayetteville",
-                "region": "Arkansas",
-                "country": "US",
-                "timezone": "America/Chicago",
-            },
-        },
-    )
-
     logger.info(
         f"Requesting Anthropic completion: model={model}, prompt='{prompt[:50]}...'"
     )
@@ -271,10 +248,6 @@ async def anthropic_chat_completion(
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
             model=model,
-            tools=(
-                [tool_config] if max_uses > 0 else AnthropicNotGiven()
-            ),  # Only include tool if useful
-            # extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}, # If needed
         )
         formatted_message: str = _format_anthropic_message(message)
         logger.info(f"Anthropic completion successful for model {model}.")
@@ -833,18 +806,15 @@ async def edit_gpt_image(
                 mask.seek(0)
                 mask_file = mask
 
-        # For GPT Image API with multiple images, try different approaches
-        # Based on the error, let's try tuple instead of list for multiple images
-        if len(image_files) == 1:
-            image_param = image_files[0]
-        else:
-            # Try tuple for multiple images as mentioned in error message
-            image_param = tuple(image_files)
+        # OpenAI's image edit API only supports a single image, not multiple images
+        # Use the first image if multiple are provided
+        if len(image_files) > 1:
+            logger.warning(f"GPT Image edit API only supports single image, using first of {len(image_files)} provided")
 
-        # Build API parameters
+        # Build API parameters with single image
         api_params: dict[str, Any] = {
             "model": model,
-            "image": image_param,
+            "image": image_files[0],  # Always use the first (and typically only) image
             "prompt": prompt,
             "size": size,
         }
@@ -923,3 +893,626 @@ async def edit_gpt_image(
                 mask_file_to_close.close()
             except Exception as e_close:
                 logger.exception(f"Error closing mask file: {e_close}")
+
+
+# --- Celeste Diffusion API Service ---
+
+async def generate_celeste_image(
+    prompt: str,
+    negative_prompt: str | None = None,
+    num_inference_steps: int = 30,
+    guidance_scale: float = 7.5,
+    seed: int | None = None,
+    width: int = 512,
+    height: int = 512,
+) -> Path:
+    """
+    Generates an image using the Celeste Diffusion API.
+
+    Args:
+        prompt: The text prompt for image generation.
+        negative_prompt: Optional negative prompt to avoid certain elements.
+        num_inference_steps: Number of denoising steps (10-100).
+        guidance_scale: How closely to follow the prompt (1.0-20.0).
+        seed: Optional seed for reproducible results.
+        width: Image width in pixels.
+        height: Image height in pixels.
+
+    Returns:
+        Path to the generated image file.
+
+    Raises:
+        httpx.HTTPStatusError: For HTTP errors from the API.
+        RuntimeError: For other operational issues.
+    """
+    celeste_api_url: str = "http://192.168.1.216:8000"
+
+    # Clamp values to valid ranges
+    num_inference_steps = min(max(num_inference_steps, 10), 100)
+    guidance_scale = min(max(guidance_scale, 1.0), 20.0)
+
+    payload: dict[str, Any] = {
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "num_inference_steps": num_inference_steps,
+        "guidance_scale": guidance_scale,
+        "seed": seed,
+        "width": width,
+        "height": height,
+    }
+
+    logger.info(
+        f"Requesting Celeste image generation: prompt='{prompt[:50]}...', "
+        f"steps={num_inference_steps}, guidance={guidance_scale}"
+    )
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.post(f"{celeste_api_url}/generate", json=payload)
+            response.raise_for_status()
+
+            data: dict[str, Any] = response.json()
+
+            if "image" not in data:
+                logger.error("Celeste API response missing image data")
+                raise RuntimeError("Celeste API did not return image data")
+
+            # Decode base64 image
+            image_base64: str = data["image"]
+            image_bytes: bytes = base64.b64decode(image_base64)
+            actual_seed: int = data.get("seed", seed or 0)
+
+            # Save the image
+            cache_dir: Path = Path(".cache/celeste")
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            safe_prompt_suffix: str = "".join(
+                c if c.isalnum() else "_" for c in prompt[:30]
+            )
+            filename: str = f"celeste_{safe_prompt_suffix}_{actual_seed}.png"
+            file_path: Path = cache_dir / filename
+
+            with open(file_path, "wb") as f:
+                f.write(image_bytes)
+
+            logger.info(f"Celeste image generated successfully: {file_path}")
+            return file_path
+
+        except httpx.ConnectError:
+            logger.exception("Cannot connect to Celeste API server")
+            raise RuntimeError(
+                "Cannot connect to the Celeste API server. Please check if it's running."
+            )
+        except httpx.HTTPStatusError as e:
+            logger.exception(
+                f"Celeste API HTTP error: {e.response.status_code} - {e.response.text}"
+            )
+            raise
+        except Exception as e:
+            logger.exception(f"Error generating Celeste image: {e}")
+            raise RuntimeError(f"Failed to generate image: {e!s}")
+
+
+
+# --- GLIDE API Service ---
+
+async def generate_glide_image(
+    prompt: str,
+    guidance_scale: float = 4.0,
+    base_steps: int = 30,
+    sr_steps: int = 30,
+    sampler: str = "euler",
+    seed: int | None = None,
+    output_format: str = "png",
+    skip_sr: bool = False,
+    batch_size: int = 1,
+) -> list[Path]:
+    """
+    Generates one or more images using the GLIDE API service.
+
+    Args:
+        prompt: The text prompt for image generation.
+        guidance_scale: Classifier-free guidance scale (0.0-20.0).
+        base_steps: Number of sampling steps for base model (1-100).
+        sr_steps: Number of sampling steps for super-resolution model (1-100).
+        sampler: Sampling method (euler, euler_a, dpm++, plms, ddim).
+        seed: Optional seed for reproducible results.
+        output_format: Output image format (png, jpg, jpeg).
+        skip_sr: Skip super-resolution and return 64x64 image.
+        batch_size: Number of images to generate (1-8).
+
+    Returns:
+        List of paths to the generated image files (256x256 or 64x64 if skip_sr).
+
+    Raises:
+        httpx.HTTPStatusError: For HTTP errors from the API.
+        RuntimeError: For other operational issues.
+    """
+    glide_api_url: str = "http://100.70.95.57:8001"
+
+    # Clamp values to valid ranges
+    guidance_scale = min(max(guidance_scale, 0.0), 20.0)
+    base_steps = min(max(base_steps, 1), 100)
+    sr_steps = min(max(sr_steps, 1), 100)
+    batch_size = min(max(batch_size, 1), 8)
+
+    payload: dict[str, Any] = {
+        "prompt": prompt,
+        "batch_size": batch_size,
+        "guidance_scale": guidance_scale,
+        "base_steps": base_steps,
+        "sr_steps": sr_steps,
+        "sampler": sampler,
+        "seed": seed,
+        "output_format": output_format,
+        "use_fp16": False,  # Use full precision for better quality
+        "skip_sr": skip_sr,
+        "return_all": batch_size > 1,  # Return all images if batch
+    }
+
+    logger.info(
+        f"Requesting GLIDE image generation: prompt='{prompt[:50]}...', "
+        f"batch_size={batch_size}, base_steps={base_steps}, sr_steps={sr_steps}, "
+        f"guidance={guidance_scale}, sampler={sampler}"
+    )
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        try:
+            response = await client.post(f"{glide_api_url}/generate", json=payload)
+            response.raise_for_status()
+
+            # Create cache directory
+            cache_dir: Path = Path(".cache/glide")
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            safe_prompt_suffix: str = "".join(
+                c if c.isalnum() else "_" for c in prompt[:30]
+            )
+            actual_seed: int = seed if seed is not None else 0
+
+            image_paths: list[Path] = []
+
+            if batch_size == 1:
+                # Single image returned as bytes
+                image_bytes: bytes = response.content
+                filename: str = f"glide_{safe_prompt_suffix}_{actual_seed}.{output_format}"
+                file_path: Path = cache_dir / filename
+
+                with open(file_path, "wb") as f:
+                    f.write(image_bytes)
+
+                image_paths.append(file_path)
+                logger.info(f"GLIDE image generated successfully: {file_path}")
+            else:
+                # Multiple images returned as JSON with base64 data
+                import base64
+                import json
+
+                response_data = json.loads(response.content)
+                images_data = response_data.get("images", [])
+
+                for i, img_data in enumerate(images_data):
+                    # Decode base64 image
+                    image_bytes = base64.b64decode(img_data)
+                    filename = f"glide_{safe_prompt_suffix}_{actual_seed}_{i+1}.{output_format}"
+                    file_path = cache_dir / filename
+
+                    with open(file_path, "wb") as f:
+                        f.write(image_bytes)
+
+                    image_paths.append(file_path)
+                    logger.info(f"GLIDE image {i+1}/{batch_size} generated: {file_path}")
+
+            return image_paths
+
+        except httpx.ConnectError:
+            logger.exception("Cannot connect to GLIDE API server")
+            raise RuntimeError(
+                "Cannot connect to the GLIDE API server. Please check if it's running."
+            )
+        except httpx.HTTPStatusError as e:
+            logger.exception(
+                f"GLIDE API HTTP error: {e.response.status_code} - {e.response.text}"
+            )
+            raise
+        except Exception as e:
+            logger.exception(f"Error generating GLIDE image: {e}")
+            raise RuntimeError(f"Failed to generate image: {e!s}")
+
+
+# --- Obscast Media API Service ---
+
+class ObscastAPIError(Exception):
+    """Custom exception for Obscast API errors."""
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class ObscastAPIClient:
+    """A simple async client to communicate with the Obscast backend API."""
+
+    def __init__(self, base_url: str | None, timeout: float = 30.0) -> None:
+        if not base_url:
+            raise ValueError("OBSCAST_API_URL is not configured.")
+        self._client = httpx.AsyncClient(base_url=base_url, timeout=timeout)
+        self.base_url = base_url
+        logger.info(f"Obscast API Client initialized for base URL: {base_url}")
+
+    async def _request(self, method: str, endpoint: str, **kwargs: Any) -> dict[str, Any]:
+        """Performs an API request and handles errors."""
+        try:
+            response = await self._client.request(method, endpoint, **kwargs)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.exception(f"Obscast API request failed: {e.response.status_code} - {e.response.text}")
+            raise ObscastAPIError(f"API request failed: {e.response.text}", e.response.status_code) from e
+        except httpx.RequestError as e:
+            logger.exception(f"Obscast API connection error: {e}")
+            raise ObscastAPIError(f"Could not connect to Obscast API at {self.base_url}") from e
+
+    async def get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return await self._request("GET", endpoint, params=params or {})
+
+    async def post(self, endpoint: str, json: dict[str, Any] | None = None) -> dict[str, Any]:
+        return await self._request("POST", endpoint, json=json or {})
+
+    async def close(self) -> None:
+        """Close the HTTP client."""
+        await self._client.aclose()
+
+
+# Initialize the client from environment variables
+OBSCAST_API_URL: str | None = os.getenv("OBSCAST_API_URL")
+obscast_client: ObscastAPIClient | None = None
+if OBSCAST_API_URL:
+    obscast_client = ObscastAPIClient(base_url=OBSCAST_API_URL)
+else:
+    logger.warning("OBSCAST_API_URL not set. Media commands will not be available.")
+
+
+async def search_obscast_media(
+    query: str, media_type: str | None = None, limit: int = 25
+) -> list[dict[str, Any]]:
+    """Search for media on the Obscast server."""
+    if not obscast_client:
+        raise ObscastAPIError("Obscast service is not configured.")
+    params = {"q": query, "limit": limit}
+    if media_type:
+        params["media_type"] = media_type
+    response = await obscast_client.get("/search", params=params)
+    return response.get("files", [])
+
+
+async def get_obscast_media_by_id(media_id: str) -> dict[str, Any]:
+    """Get a single media file's details from Obscast."""
+    if not obscast_client:
+        raise ObscastAPIError("Obscast service is not configured.")
+    return await obscast_client.get(f"/media/{media_id}")
+
+
+async def play_obscast_media(media_id: str) -> dict[str, Any]:
+    """Request to play a media file on OBS via Obscast."""
+    if not obscast_client:
+        raise ObscastAPIError("Obscast service is not configured.")
+    return await obscast_client.post(f"/obs/play/{media_id}")
+
+
+async def queue_obscast_media(media_id: str) -> dict[str, Any]:
+    """Request to queue a media file on OBS via Obscast."""
+    if not obscast_client:
+        raise ObscastAPIError("Obscast service is not configured.")
+    return await obscast_client.post(f"/obs/queue/{media_id}")
+
+
+async def get_obscast_current() -> dict[str, Any]:
+    """Get the currently playing media from Obscast."""
+    if not obscast_client:
+        raise ObscastAPIError("Obscast service is not configured.")
+    return await obscast_client.get("/obs/current")
+
+
+async def get_obscast_queue() -> dict[str, Any]:
+    """Get the current OBS queue from Obscast."""
+    if not obscast_client:
+        raise ObscastAPIError("Obscast service is not configured.")
+    return await obscast_client.get("/obs/queue")
+
+
+async def control_obscast_playback(action: str) -> dict[str, Any]:
+    """Send a playback control action to Obscast (e.g., skip, pause)."""
+    if not obscast_client:
+        raise ObscastAPIError("Obscast service is not configured.")
+    valid_actions = ["skip", "pause", "resume", "stop", "next", "previous"]
+    if action not in valid_actions:
+        raise ValueError(f"Invalid playback action: {action}")
+
+    if action == "stop":  # Obscast uses pause for stop
+        action = "pause"
+
+    return await obscast_client.post(f"/obs/{action}")
+
+
+# CLIP Retrieval API integration
+async def search_clip_images(
+    query: str,
+    num_images: int = 4,
+    index_name: str = "laion-aesthetic-9m-16gb",
+    deduplicate: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Search for images using the CLIP retrieval backend.
+
+    Args:
+        query: Text query to search for
+        num_images: Number of images to return (default 4)
+        index_name: Name of the index to search
+        deduplicate: Whether to remove duplicate results
+
+    Returns:
+        List of image results with URLs and metadata
+
+    Raises:
+        httpx.HTTPStatusError: For HTTP errors from the API
+        RuntimeError: If CLIP API URL is not configured
+    """
+    clip_api_url = os.getenv("CLIP_API_URL", "http://archer:1234")
+    if not clip_api_url:
+        raise RuntimeError("CLIP_API_URL is not configured")
+
+    payload = {
+        "text": query,
+        "modality": "text",
+        "num_images": num_images,
+        "indice_name": index_name,
+        "deduplicate": deduplicate,
+        "use_safety_model": True,  # Filter NSFW content
+        "aesthetic_score": 7,  # Prefer higher aesthetic quality
+        "aesthetic_weight": 0.3,
+    }
+
+    logger.info(f"Searching CLIP for: '{query}' (requesting {num_images} images)")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(f"{clip_api_url}/knn-service", json=payload)
+            response.raise_for_status()
+            results = response.json()
+
+            # Filter results to only include those with valid URLs
+            valid_results = [
+                result for result in results
+                if result.get("url") and result["url"].startswith(("http://", "https://"))
+            ]
+
+            logger.info(f"CLIP search returned {len(valid_results)} valid results")
+            return valid_results[:num_images]
+
+        except httpx.HTTPStatusError as e:
+            logger.exception(
+                f"CLIP API HTTP error for query '{query}': {e.response.status_code} - {e.response.text}"
+            )
+            raise RuntimeError(f"CLIP API error: {e.response.text}") from e
+        except httpx.RequestError as e:
+            logger.exception(f"CLIP API connection error: {e}")
+            raise RuntimeError(f"Could not connect to CLIP API at {clip_api_url}") from e
+
+
+async def get_clip_indices() -> list[str]:
+    """
+    Get list of available CLIP indices.
+
+    Returns:
+        List of available index names
+
+    Raises:
+        RuntimeError: If API is not configured or request fails
+    """
+    clip_api_url = os.getenv("CLIP_API_URL", "http://archer:1234")
+    if not clip_api_url:
+        raise RuntimeError("CLIP_API_URL is not configured")
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.get(f"{clip_api_url}/indices-list")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.exception(f"CLIP API HTTP error: {e.response.status_code} - {e.response.text}")
+            raise RuntimeError(f"CLIP API error: {e.response.text}") from e
+        except httpx.RequestError as e:
+            logger.exception(f"CLIP API connection error: {e}")
+            raise RuntimeError(f"Could not connect to CLIP API at {clip_api_url}") from e
+
+
+async def generate_stable_lora(
+    caption: str,
+    lora: str,
+    lora_strength: float = 1.0,
+    batch_size: int = 1,
+    seed: int = 42,
+    guidance_scale: float = 7.5
+) -> list[bytes]:
+    """
+    Generate images using Stable Diffusion with specified LoRA.
+
+    Args:
+        caption: Text description for the image generation
+        lora: LoRA style to use (e.g., 'pixelart', 'trippy')
+        lora_strength: Strength of LoRA influence (0.0-2.0, default 1.0)
+        batch_size: Number of images to generate (default 1)
+        seed: Random seed for reproducible generation (default 42)
+        guidance_scale: Guidance scale for generation strength (default 7.5)
+
+    Returns:
+        List of generated images as bytes
+
+    Raises:
+        RuntimeError: If the API request fails
+    """
+    lora_api_url = "http://100.70.95.57:8000/lora"
+
+    # Pass caption through as-is (no enhancement)
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            logger.info(
+                f"Generating stable diffusion with LoRA '{lora}' (strength={lora_strength}): "
+                f"caption='{caption}', batch_size={batch_size}, seed={seed}, "
+                f"guidance_scale={guidance_scale}"
+            )
+
+            response = await client.post(
+                lora_api_url,
+                json={
+                    "caption": caption,
+                    "lora": lora,
+                    "lora_strength": lora_strength,
+                    "batch_size": batch_size,
+                    "seed": seed,
+                    "guidance_scale": guidance_scale
+                }
+            )
+            response.raise_for_status()
+
+            # The API returns images as a list of base64-encoded strings
+            result = response.json()
+            images = result.get("images", [])
+
+            if not images:
+                raise RuntimeError("No images returned from stable diffusion API")
+
+            # Convert base64 strings to bytes
+            image_bytes_list = []
+            for img_b64 in images:
+                # Remove data URL prefix if present
+                if "," in img_b64:
+                    img_b64 = img_b64.split(",", 1)[1]
+                img_bytes = base64.b64decode(img_b64)
+                image_bytes_list.append(img_bytes)
+
+            logger.info(f"Successfully generated {len(image_bytes_list)} images with LoRA '{lora}'")
+            return image_bytes_list
+
+        except httpx.HTTPStatusError as e:
+            logger.exception(f"Stable diffusion API HTTP error: {e.response.status_code}")
+            error_msg = f"Stable diffusion API error: {e.response.status_code}"
+            try:
+                error_detail = e.response.json()
+                if "detail" in error_detail:
+                    error_msg = f"Stable diffusion API error: {error_detail['detail']}"
+            except Exception:
+                pass
+            raise RuntimeError(error_msg) from e
+        except httpx.RequestError as e:
+            logger.exception(f"Stable diffusion API connection error: {e}")
+            raise RuntimeError(f"Could not connect to stable diffusion API at {lora_api_url}") from e
+        except Exception as e:
+            logger.exception(f"Unexpected error generating image with LoRA '{lora}': {e}")
+            raise RuntimeError(f"Failed to generate image with LoRA '{lora}': {e!s}") from e
+
+
+async def generate_dalle_blog_sdxl_image(
+    prompt: str,
+    negative_prompt: str | None = None,
+    width: int = 1024,
+    height: int = 1024,
+    num_inference_steps: int = 25,
+    guidance_scale: float = 7.5,
+    seed: int = 42,
+    output_format: str = "base64",
+) -> Path:
+    """
+    Generates an image using the DALLE-blog SDXL API with hybrid LoRA approach.
+
+    Args:
+        prompt: The text prompt for image generation.
+        negative_prompt: Optional negative prompt to avoid certain elements.
+        width: Image width in pixels (default: 1024).
+        height: Image height in pixels (default: 1024).
+        num_inference_steps: Number of denoising steps (default: 25).
+        guidance_scale: How closely to follow the prompt (default: 7.5).
+        seed: Random seed for reproducible results (default: 42).
+        output_format: Output format - "base64", "png", or "jpeg" (default: "base64").
+
+    Returns:
+        Path to the generated image file.
+
+    Raises:
+        httpx.HTTPStatusError: For HTTP errors from the API.
+        RuntimeError: For other operational issues.
+    """
+    dalle_blog_api_url: str = "http://100.70.95.57:8002/generate"
+
+    payload: dict[str, Any] = {
+        "prompt": prompt,
+        "negative_prompt": negative_prompt or "",
+        "width": width,
+        "height": height,
+        "num_inference_steps": num_inference_steps,
+        "guidance_scale": guidance_scale,
+        "seed": seed,
+        "output_format": output_format,
+    }
+
+    logger.info(
+        f"Requesting DALLE-blog SDXL image generation: prompt='{prompt[:50]}...', "
+        f"steps={num_inference_steps}, guidance={guidance_scale}, size={width}x{height}"
+    )
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        try:
+            response = await client.post(dalle_blog_api_url, json=payload)
+            response.raise_for_status()
+
+            data: dict[str, Any] = response.json()
+
+            # Handle base64 response format
+            if output_format == "base64":
+                if "image" not in data:
+                    logger.error("DALLE-blog SDXL API response missing image data")
+                    raise RuntimeError("DALLE-blog SDXL API did not return image data")
+
+                # Decode base64 image
+                image_base64: str = data["image"]
+                # Remove data URL prefix if present
+                if "," in image_base64:
+                    image_base64 = image_base64.split(",", 1)[1]
+                image_bytes: bytes = base64.b64decode(image_base64)
+            else:
+                # For png/jpeg format, the response might be binary
+                image_bytes = response.content
+
+            # Save the image
+            cache_dir: Path = Path(".cache/dalle_blog_sdxl")
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            safe_prompt_suffix: str = "".join(
+                c if c.isalnum() else "_" for c in prompt[:30]
+            )
+            filename: str = f"dalle_blog_sdxl_{safe_prompt_suffix}_{seed}.png"
+            file_path: Path = cache_dir / filename
+
+            with open(file_path, "wb") as f:
+                f.write(image_bytes)
+
+            logger.info(f"DALLE-blog SDXL image generated successfully: {file_path}")
+            return file_path
+
+        except httpx.ConnectError:
+            logger.exception("Cannot connect to DALLE-blog SDXL API server")
+            raise RuntimeError(
+                "Cannot connect to the DALLE-blog SDXL API server. Please check if it's running on port 8002."
+            )
+        except httpx.HTTPStatusError as e:
+            logger.exception(
+                f"DALLE-blog SDXL API HTTP error: {e.response.status_code} - {e.response.text}"
+            )
+            raise RuntimeError(
+                f"DALLE-blog SDXL API error: {e.response.status_code} - {e.response.text}"
+            )
+        except Exception as e:
+            logger.exception(f"Error generating DALLE-blog SDXL image: {e}")
+            raise RuntimeError(f"Failed to generate DALLE-blog SDXL image: {e!s}")
