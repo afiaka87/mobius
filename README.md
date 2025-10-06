@@ -109,7 +109,7 @@ pytest
 ```
 MIT License
 
-Copyright (c) 2024 Clayton Mullis
+Copyright (c) 2025 Clayton Mullis
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
