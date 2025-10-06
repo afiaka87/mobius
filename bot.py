@@ -180,7 +180,10 @@ async def on_ready() -> None:
     logger.info("Registering commands...")
     try:
         register_all_commands(bot)
-        logger.info("Commands registered. Syncing to guilds...")
+        logger.info("Commands registered. Syncing globally first...")
+        # Try global sync first
+        await bot.tree.sync()
+        logger.info("Global sync complete. Now syncing to guilds...")
         await sync_commands_to_guilds(bot)
         logger.info("Slash commands synced! Bot is ready.")
     except RuntimeError as e:
