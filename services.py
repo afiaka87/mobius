@@ -1617,7 +1617,8 @@ async def generate_sdxl_pixelart_image(
             # Decode and save all images
             image_paths: list[Path] = []
             metadata = data.get("metadata", {})
-            actual_seed = metadata.get("seed", seed or 0)
+            # Handle case where API returns None for seed
+            actual_seed = metadata.get("seed") or seed or 0
 
             for i, img_base64 in enumerate(data["images"]):
                 # Decode base64 image
@@ -1632,7 +1633,9 @@ async def generate_sdxl_pixelart_image(
                     safe_prompt_suffix = f"batch_{len(prompt)}_prompts"
 
                 # Include image index and seed in filename
-                img_seed = actual_seed + i if isinstance(prompt, str) else actual_seed
+                # Ensure actual_seed is always an int
+                seed_value = int(actual_seed) if actual_seed is not None else 0
+                img_seed = seed_value + i if isinstance(prompt, str) else seed_value
                 filename = f"sdxl_pixelart_{safe_prompt_suffix}_{img_seed}_{i+1}.png"
                 file_path = cache_dir / filename
 
