@@ -97,6 +97,28 @@ To check the logs, use `journalctl`:
 sudo journalctl -u mobius.service -f
 ```
 
+## Deployment
+
+### Fly.io Deployment
+
+This project includes both a Discord bot and a FastAPI REST API that can be deployed to fly.io as separate applications.
+
+#### Deploy the Discord Bot
+```bash
+fly deploy --config fly.toml
+```
+
+#### Deploy the FastAPI API
+```bash
+fly deploy --config fly.api.toml
+```
+
+Each application has its own Dockerfile and configuration:
+- **Bot**: Uses `Dockerfile` and `fly.toml`
+- **API**: Uses `Dockerfile.api` and `fly.api.toml`
+
+The API will be accessible via HTTPS and includes auto-scaling, while the bot runs as a persistent background process.
+
 ## Tests
 
 To run the tests, use `pytest`:
