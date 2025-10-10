@@ -45,6 +45,7 @@ COMMANDS_INFO: Final[dict[str, str]] = {
     "rembg": "Remove image background using Rembg.",
     "gptimg": "Generate or edit images using OpenAI's GPT Image model.",
     "t2v": "Generate text-to-video using WAN models.",
+    "pixel": "Generate images with SDXL model with LoRA support.",
 }
 
 # Type alias for model choice values
@@ -118,6 +119,8 @@ FalImageSize = Literal[
 GPTImageModel = Literal["gpt-image-1"]
 GPTImageSize = Literal["auto", "1024x1024", "1536x1024", "1024x1536"]
 GPTImageQuality = Literal["auto", "low", "medium", "high"]
+
+SDXLScheduler = Literal["euler", "ddim"]
 
 
 @app_commands.command(
@@ -959,3 +962,84 @@ async def gptimg_command(
                 logger.exception(f"gptimg: Error during final task cleanup: {e_gather}")
 
         return None
+
+
+@app_commands.command(
+    name="pixel", description="Generate images with SDXL model with LoRA support."
+)
+@app_commands.choices(
+    scheduler=[
+        app_commands.Choice(name="euler", value="euler"),
+        app_commands.Choice(name="ddim", value="ddim"),
+    ]
+)
+async def pixel_command(
+    interaction: discord.Interaction,
+    prompt: str,
+    negative_prompt: str | None = None,
+    width: app_commands.Range[int, 256, 2048] = 1024,
+    height: app_commands.Range[int, 256, 2048] = 1024,
+    num_inference_steps: app_commands.Range[int, 1, 150] = 30,
+    guidance_scale: app_commands.Range[float, 1.0, 20.0] = 7.5,
+    num_images_per_prompt: app_commands.Range[int, 1, 4] = 1,
+    seed: int | None = None,
+    lora_weight: app_commands.Range[float, 0.0, 2.0] = 1.0,
+    scheduler: SDXLScheduler = "euler",
+) -> None:
+    """Generates images using the SDXL model with optional LoRA support."""
+    await interaction.response.defer(ephemeral=False, thinking=True)
+    start_time: float = time.time()
+
+    try:
+        image_paths: list[Path] = await services.generate_sdxl_image(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            width=width,
+            height=height,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            num_images_per_prompt=num_images_per_prompt,
+            seed=seed,
+            lora_weight=lora_weight,
+            scheduler=scheduler,
+        )
+
+        total_time_seconds: float = time.time() - start_time
+        mins, secs = divmod(int(total_time_seconds), 60)
+
+        # Prepare Discord files
+        discord_files: list[discord.File] = [
+            discord.File(img_path, filename=img_path.name) for img_path in image_paths
+        ]
+
+        # Build response message
+        response_lines: list[str] = [
+            f"✅ Generated {len(image_paths)} image(s) with SDXL! (Took {mins}m {secs}s)",
+            f"**Prompt:** {discord.utils.escape_markdown(prompt)}",
+            f"**Size:** {width}x{height} | **Steps:** {num_inference_steps} | **Guidance:** {guidance_scale}",
+            f"**Scheduler:** {scheduler} | **LoRA Weight:** {lora_weight}",
+        ]
+
+        if negative_prompt:
+            response_lines.append(
+                f"**Negative Prompt:** {discord.utils.escape_markdown(negative_prompt)}"
+            )
+
+        if seed is not None:
+            response_lines.append(f"**Seed:** {seed}")
+
+        response_message: str = "\n".join(response_lines)
+
+        await interaction.followup.send(content=response_message, files=discord_files)
+
+    except ValueError as ve:
+        logger.exception(f"pixel: Configuration error - {ve}")
+        await interaction.followup.send(
+            f"❌ Configuration error: {ve}\n\nPlease ensure SDXL_API_URL is set in your environment.",
+            ephemeral=True,
+        )
+    except Exception as e:
+        logger.exception(f"pixel: Error generating image for prompt: {prompt}")
+        await interaction.followup.send(
+            f"❌ An error occurred while generating the image: {e!s}", ephemeral=True
+        )
