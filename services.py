@@ -1516,3 +1516,150 @@ async def generate_dalle_blog_sdxl_image(
         except Exception as e:
             logger.exception(f"Error generating DALLE-blog SDXL image: {e}")
             raise RuntimeError(f"Failed to generate DALLE-blog SDXL image: {e!s}")
+
+
+async def generate_sdxl_pixelart_image(
+    prompt: str | list[str],
+    negative_prompt: str | list[str] | None = None,
+    width: int = 1024,
+    height: int = 1024,
+    num_inference_steps: int = 30,
+    guidance_scale: float = 7.5,
+    num_images_per_prompt: int = 1,
+    seed: int | None = None,
+    lora_weight: float = 1.0,
+    scheduler: str = "euler",
+    api_url: str = "http://localhost:8000",
+) -> list[Path]:
+    """
+    Generates images using the SDXL API with LoRA support (pixel art).
+
+    This service supports three operating modes:
+    1. Single prompt, multiple images: Generate variations from one prompt
+    2. Multiple prompts, one image each: Batch generation of diverse images
+    3. Single prompt, single image: Basic generation
+
+    Args:
+        prompt: Single text prompt or list of prompts for image generation.
+        negative_prompt: Single negative prompt or list to guide what NOT to generate.
+        width: Output image width in pixels (256-2048, default: 1024).
+        height: Output image height in pixels (256-2048, default: 1024).
+        num_inference_steps: Denoising steps (1-150, default: 30, more=higher quality but slower).
+        guidance_scale: Classifier-free guidance (1.0-20.0, default: 7.5, higher=follows prompt more strictly).
+        num_images_per_prompt: How many images per prompt (1-4, default: 1, only for single prompt).
+        seed: Random seed for reproducible results (None=random seed).
+        lora_weight: LoRA influence strength (0.0-2.0, default: 1.0, 0.0=disabled, 1.0=normal, >1.0=amplified).
+        scheduler: Diffusion noise scheduler ("euler" or "ddim", default: "euler").
+        api_url: Base URL of the SDXL API server (default: "http://localhost:8000").
+
+    Returns:
+        List of paths to the generated image files.
+
+    Raises:
+        httpx.HTTPStatusError: For HTTP errors from the API.
+        RuntimeError: For other operational issues.
+        ValueError: For invalid parameter combinations.
+    """
+    # Validate parameters
+    if isinstance(prompt, list) and len(prompt) > 1 and num_images_per_prompt > 1:
+        logger.warning(
+            f"Multiple prompts with num_images_per_prompt > 1 is not supported. "
+            f"Setting num_images_per_prompt to 1."
+        )
+        num_images_per_prompt = 1
+
+    # Clamp values to valid ranges
+    width = min(max(width, 256), 2048)
+    height = min(max(height, 256), 2048)
+    num_inference_steps = min(max(num_inference_steps, 1), 150)
+    guidance_scale = min(max(guidance_scale, 1.0), 20.0)
+    num_images_per_prompt = min(max(num_images_per_prompt, 1), 4)
+    lora_weight = min(max(lora_weight, 0.0), 2.0)
+
+    if scheduler not in ["euler", "ddim"]:
+        raise ValueError(f"scheduler must be 'euler' or 'ddim', got '{scheduler}'")
+
+    payload: dict[str, Any] = {
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "width": width,
+        "height": height,
+        "num_inference_steps": num_inference_steps,
+        "guidance_scale": guidance_scale,
+        "num_images_per_prompt": num_images_per_prompt,
+        "seed": seed,
+        "lora_weight": lora_weight,
+        "scheduler": scheduler,
+    }
+
+    prompt_preview = prompt if isinstance(prompt, str) else f"[{len(prompt)} prompts]"
+    logger.info(
+        f"Requesting SDXL pixel art image generation: prompt='{str(prompt_preview)[:50]}...', "
+        f"steps={num_inference_steps}, guidance={guidance_scale}, size={width}x{height}, "
+        f"lora_weight={lora_weight}, num_images={num_images_per_prompt}"
+    )
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        try:
+            response = await client.post(f"{api_url}/generate", json=payload)
+            response.raise_for_status()
+
+            data: dict[str, Any] = response.json()
+
+            if "images" not in data or not data["images"]:
+                logger.error("SDXL API response missing image data")
+                raise RuntimeError("SDXL API did not return any images")
+
+            # Create cache directory
+            cache_dir: Path = Path(".cache/sdxl_pixelart")
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            # Decode and save all images
+            image_paths: list[Path] = []
+            metadata = data.get("metadata", {})
+            actual_seed = metadata.get("seed", seed or 0)
+
+            for i, img_base64 in enumerate(data["images"]):
+                # Decode base64 image
+                image_bytes: bytes = base64.b64decode(img_base64)
+
+                # Generate filename
+                if isinstance(prompt, str):
+                    safe_prompt_suffix = "".join(
+                        c if c.isalnum() else "_" for c in prompt[:30]
+                    )
+                else:
+                    safe_prompt_suffix = f"batch_{len(prompt)}_prompts"
+
+                # Include image index and seed in filename
+                img_seed = actual_seed + i if isinstance(prompt, str) else actual_seed
+                filename = f"sdxl_pixelart_{safe_prompt_suffix}_{img_seed}_{i+1}.png"
+                file_path = cache_dir / filename
+
+                with open(file_path, "wb") as f:
+                    f.write(image_bytes)
+
+                image_paths.append(file_path)
+                logger.info(f"SDXL pixel art image {i+1}/{len(data['images'])} saved: {file_path}")
+
+            logger.info(
+                f"SDXL pixel art generation complete. Generated {len(image_paths)} images. "
+                f"Metadata: {metadata}"
+            )
+            return image_paths
+
+        except httpx.ConnectError:
+            logger.exception(f"Cannot connect to SDXL API server at {api_url}")
+            raise RuntimeError(
+                f"Cannot connect to the SDXL API server at {api_url}. Please check if it's running."
+            )
+        except httpx.HTTPStatusError as e:
+            logger.exception(
+                f"SDXL API HTTP error: {e.response.status_code} - {e.response.text}"
+            )
+            raise RuntimeError(
+                f"SDXL API error: {e.response.status_code} - {e.response.text}"
+            )
+        except Exception as e:
+            logger.exception(f"Error generating SDXL pixel art image: {e}")
+            raise RuntimeError(f"Failed to generate SDXL pixel art image: {e!s}")
