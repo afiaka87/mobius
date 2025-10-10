@@ -1516,3 +1516,122 @@ async def generate_dalle_blog_sdxl_image(
         except Exception as e:
             logger.exception(f"Error generating DALLE-blog SDXL image: {e}")
             raise RuntimeError(f"Failed to generate DALLE-blog SDXL image: {e!s}")
+
+# --- SDXL Image Generation Service ---
+async def generate_sdxl_image(
+    prompt: str | list[str],
+    negative_prompt: str | list[str] | None = None,
+    width: int = 1024,
+    height: int = 1024,
+    num_inference_steps: int = 30,
+    guidance_scale: float = 7.5,
+    num_images_per_prompt: int = 1,
+    seed: int | None = None,
+    lora_weight: float = 1.0,
+    scheduler: Literal["euler", "ddim"] = "euler",
+) -> list[Path]:
+    """
+    Generates images using the SDXL model via a custom API endpoint.
+
+    Args:
+        prompt: Text prompt(s) to generate images from.
+        negative_prompt: Negative prompt(s) for guidance.
+        width: Image width in pixels (256-2048).
+        height: Image height in pixels (256-2048).
+        num_inference_steps: Number of denoising steps (1-150).
+        guidance_scale: CFG scale for prompt following (1.0-20.0).
+        num_images_per_prompt: Images to generate per prompt (1-4, single prompt only).
+        seed: Random seed for reproducibility (None = random).
+        lora_weight: LoRA strength (0.0-2.0).
+        scheduler: Diffusion scheduler type ("euler" or "ddim").
+
+    Returns:
+        List of file paths to the generated images (PNG format).
+
+    Raises:
+        ValueError: If SDXL API URL is not configured or parameters are invalid.
+        httpx.HTTPStatusError: For HTTP errors from the SDXL API.
+        RuntimeError: For other operational issues.
+    """
+    sdxl_api_url: str | None = os.getenv("SDXL_API_URL")
+    if not sdxl_api_url:
+        logger.error("SDXL_API_URL not found in environment variables.")
+        raise ValueError("SDXL API URL is not configured.")
+
+    # Build API request payload
+    payload: dict[str, Any] = {
+        "prompt": prompt,
+        "width": width,
+        "height": height,
+        "num_inference_steps": num_inference_steps,
+        "guidance_scale": guidance_scale,
+        "num_images_per_prompt": num_images_per_prompt,
+        "lora_weight": lora_weight,
+        "scheduler": scheduler,
+    }
+
+    if negative_prompt is not None:
+        payload["negative_prompt"] = negative_prompt
+
+    if seed is not None:
+        payload["seed"] = seed
+
+    logger.info(
+        f"Requesting SDXL image generation: prompt='{str(prompt)[:50]}...', "
+        f"size={width}x{height}, steps={num_inference_steps}"
+    )
+
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        try:
+            response = await client.post(
+                f"{sdxl_api_url}/generate",
+                json=payload,
+            )
+            response.raise_for_status()
+            data: dict[str, Any] = response.json()
+
+            images_b64: list[str] = data.get("images", [])
+            if not images_b64:
+                logger.error("SDXL API returned no images.")
+                raise RuntimeError("SDXL API did not return any images.")
+
+            # Save images to cache directory
+            cache_dir: Path = Path(".cache/sdxl_generated")
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            image_paths: list[Path] = []
+            for idx, img_b64 in enumerate(images_b64):
+                image_bytes: bytes = base64.b64decode(img_b64)
+
+                # Generate safe filename
+                prompt_str: str = str(prompt) if isinstance(prompt, str) else str(prompt[0])
+                safe_prompt_suffix: str = "".join(
+                    c if c.isalnum() else "_" for c in prompt_str[:30]
+                )
+                filename: str = (
+                    f"sdxl_{safe_prompt_suffix}_{width}x{height}_{idx}.png"
+                )
+                file_path: Path = cache_dir / filename
+
+                # Save as PNG
+                image: Image.Image = Image.open(BytesIO(image_bytes))
+                image.save(file_path, format="PNG", optimize=True)
+
+                image_paths.append(file_path)
+                logger.info(f"SDXL image {idx + 1} saved to: {file_path}")
+
+            logger.info(
+                f"SDXL generation successful. Generated {len(image_paths)} image(s)."
+            )
+            return image_paths
+
+        except httpx.HTTPStatusError as e:
+            logger.exception(
+                f"SDXL API HTTP error: {e.response.status_code} - {e.response.text}"
+            )
+            raise
+        except Exception as e:
+            logger.exception(f"Error during SDXL image generation: {e}")
+            raise RuntimeError(
+                f"An unexpected error occurred during SDXL image generation: {e!s}"
+            )
