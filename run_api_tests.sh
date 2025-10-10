@@ -1,9 +1,6 @@
 #!/bin/bash
 # run_api_tests.sh
-
-"""
-Quick script to test the API endpoints.
-"""
+# Quick script to test the API endpoints.
 
 echo "===================="
 echo "MOBIUS API TESTING"
