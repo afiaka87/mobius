@@ -42,6 +42,7 @@ COMMANDS_INFO: Final[dict[str, str]] = {
     "google": "Uses Google Custom Search API to get results from the web.",
     "flux": "Generate images with FLUX models (e.g., FLUX.1-schnell).",
     "sd3_5_large": "Generate images with Stable Diffusion 3.5 Large models.",
+    "sdxl_pixel": "Generate pixel art images using SDXL with LoRA.",
     "rembg": "Remove image background using Rembg.",
     "gptimg": "Generate or edit images using OpenAI's GPT Image model.",
     "t2v": "Generate text-to-video using WAN models.",
@@ -253,6 +254,123 @@ async def sd3_5_large_command(
         logger.exception(f"Error generating SD3.5 image for prompt: {prompt}")
         await interaction.followup.send(
             "An error occurred while generating the image with SD3.5.", ephemeral=True
+        )
+
+
+@app_commands.command(
+    name="sdxl_pixel",
+    description="Generate pixel art images using SDXL with LoRA support.",
+)
+@app_commands.choices(
+    scheduler=[
+        app_commands.Choice(name="Euler", value="euler"),
+        app_commands.Choice(name="DDIM", value="ddim"),
+    ]
+)
+async def sdxl_pixel_command(
+    interaction: discord.Interaction,
+    prompt: str,
+    negative_prompt: str | None = None,
+    width: app_commands.Range[int, 256, 2048] = 1024,
+    height: app_commands.Range[int, 256, 2048] = 1024,
+    num_inference_steps: app_commands.Range[int, 1, 150] = 30,
+    guidance_scale: app_commands.Range[float, 1.0, 20.0] = 7.5,
+    num_images: app_commands.Range[int, 1, 4] = 1,
+    seed: int | None = None,
+    lora_weight: app_commands.Range[float, 0.0, 2.0] = 1.0,
+    scheduler: str = "euler",
+) -> None:
+    """
+    Generates pixel art images using SDXL with LoRA.
+
+    This command generates high-quality pixel art using SDXL base model with a pixel art LoRA.
+    You can control the generation with various parameters including steps, guidance, and LoRA weight.
+    """
+    await interaction.response.defer(ephemeral=False, thinking=True)
+
+    # Get API URL from environment or use default
+    api_url: str = os.getenv("SDXL_PIXEL_API_URL", "http://localhost:8000")
+
+    try:
+        # Generate images using the service
+        image_paths: list[Path] = await services.generate_sdxl_pixelart_image(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            width=width,
+            height=height,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            num_images_per_prompt=num_images,
+            seed=seed,
+            lora_weight=lora_weight,
+            scheduler=scheduler,
+            api_url=api_url,
+        )
+
+        # Prepare Discord files
+        discord_files: list[discord.File] = []
+        for img_path in image_paths:
+            if img_path.exists():
+                discord_files.append(discord.File(img_path, filename=img_path.name))
+
+        if not discord_files:
+            await interaction.followup.send(
+                "Failed to generate images. No valid image files were created.",
+                ephemeral=True,
+            )
+            return
+
+        # Format the response message
+        escaped_prompt = discord.utils.escape_markdown(prompt)
+        response_msg = (
+            f"**Pixel Art Generation Complete!**\n\n"
+            f"**Prompt:** {escaped_prompt}\n"
+        )
+
+        if negative_prompt:
+            escaped_neg = discord.utils.escape_markdown(negative_prompt)
+            response_msg += f"**Negative Prompt:** {escaped_neg}\n"
+
+        response_msg += (
+            f"**Settings:** {width}x{height} | Steps: {num_inference_steps} | "
+            f"Guidance: {guidance_scale} | LoRA: {lora_weight} | Scheduler: {scheduler}\n"
+        )
+
+        if seed is not None:
+            response_msg += f"**Seed:** {seed}\n"
+
+        response_msg += f"**Generated:** {len(discord_files)} image{'s' if len(discord_files) > 1 else ''}"
+
+        # Send the message with images
+        # Discord has a 10-file limit per message
+        if len(discord_files) <= 10:
+            await interaction.followup.send(content=response_msg, files=discord_files)
+        else:
+            # Send in batches if more than 10 images
+            await interaction.followup.send(content=response_msg, files=discord_files[:10])
+            for i in range(10, len(discord_files), 10):
+                batch = discord_files[i : i + 10]
+                await interaction.followup.send(files=batch)
+
+    except RuntimeError as e:
+        logger.exception(f"Runtime error generating SDXL pixel art for prompt: {prompt}")
+        error_msg = str(e)
+        if "Cannot connect" in error_msg:
+            await interaction.followup.send(
+                f"Cannot connect to SDXL pixel art API at {api_url}. "
+                "Please ensure the API server is running.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.followup.send(
+                f"An error occurred while generating the image: {error_msg}",
+                ephemeral=True,
+            )
+    except Exception:
+        logger.exception(f"Unexpected error generating SDXL pixel art for prompt: {prompt}")
+        await interaction.followup.send(
+            "An unexpected error occurred while generating pixel art images.",
+            ephemeral=True,
         )
 
 
