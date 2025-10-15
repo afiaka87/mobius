@@ -197,13 +197,6 @@ async def on_ready() -> None:
         logger.critical(f"An unexpected error during on_ready setup: {e}")
         return
 
-    # Set bot presence (e.g., "Playing a game", "Listening to...", or invisible)
-    try:
-        await bot.change_presence(status=discord.Status.invisible)
-        logger.info("Bot presence set to invisible.")
-    except Exception as e:
-        logger.exception(f"Failed to set bot presence: {e}")
-
 
 def main() -> None:
     """
