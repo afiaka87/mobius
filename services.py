@@ -1563,8 +1563,8 @@ async def generate_sdxl_pixelart_image(
     # Validate parameters
     if isinstance(prompt, list) and len(prompt) > 1 and num_images_per_prompt > 1:
         logger.warning(
-            f"Multiple prompts with num_images_per_prompt > 1 is not supported. "
-            f"Setting num_images_per_prompt to 1."
+            "Multiple prompts with num_images_per_prompt > 1 is not supported. "
+            "Setting num_images_per_prompt to 1."
         )
         num_images_per_prompt = 1
 
@@ -1666,3 +1666,186 @@ async def generate_sdxl_pixelart_image(
         except Exception as e:
             logger.exception(f"Error generating SDXL pixel art image: {e}")
             raise RuntimeError(f"Failed to generate SDXL pixel art image: {e!s}")
+
+
+# --- Kandinsky-5 Video Generation Services ---
+async def generate_kandinsky5_video(
+    prompt: str,
+    duration: int = 5,
+    num_steps: int = 50,
+) -> Path:
+    """
+    Generate a single video using the Kandinsky-5 API.
+
+    Args:
+        prompt: Text description of the video to generate
+        duration: Duration of the video in seconds (must be 5 or 10)
+        num_steps: Number of inference steps (default: 50)
+
+    Returns:
+        Path to the saved video file
+
+    Raises:
+        ValueError: If duration is not 5 or 10
+        RuntimeError: If API call fails or returns invalid data
+    """
+    api_url = "https://archer.tailfd5df.ts.net:8443"
+
+    # Validate duration
+    if duration not in [5, 10]:
+        raise ValueError(f"Duration must be 5 or 10 seconds, got {duration}")
+
+    logger.info(
+        f"Generating Kandinsky-5 video: prompt='{prompt[:50]}...', "
+        f"duration={duration}s, steps={num_steps}"
+    )
+
+    payload = {
+        "prompt": prompt,
+        "duration": duration,
+        "num_steps": num_steps,
+    }
+
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        try:
+            response = await client.post(f"{api_url}/generate", json=payload)
+            response.raise_for_status()
+
+            data: dict[str, Any] = response.json()
+
+            if "video_base64" not in data:
+                logger.error("Kandinsky-5 API response missing video data")
+                raise RuntimeError("Kandinsky-5 API did not return video data")
+
+            # Create cache directory
+            cache_dir: Path = Path(".cache/kandinsky5")
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            # Decode and save video
+            video_bytes: bytes = base64.b64decode(data["video_base64"])
+
+            # Generate filename
+            safe_prompt = "".join(c if c.isalnum() else "_" for c in prompt[:30])
+            filename = f"kandinsky5_{safe_prompt}_{duration}s.mp4"
+            file_path = cache_dir / filename
+
+            with open(file_path, "wb") as f:
+                f.write(video_bytes)
+
+            logger.info(f"Kandinsky-5 video saved: {file_path}")
+            return file_path
+
+        except httpx.ConnectError:
+            logger.exception(f"Cannot connect to Kandinsky-5 API at {api_url}")
+            raise RuntimeError(
+                f"Cannot connect to Kandinsky-5 API at {api_url}. Please check if it's running."
+            )
+        except httpx.HTTPStatusError as e:
+            logger.exception(
+                f"Kandinsky-5 API HTTP error: {e.response.status_code} - {e.response.text}"
+            )
+            raise RuntimeError(
+                f"Kandinsky-5 API error: {e.response.status_code} - {e.response.text}"
+            )
+        except Exception as e:
+            logger.exception(f"Error generating Kandinsky-5 video: {e}")
+            raise RuntimeError(f"Failed to generate Kandinsky-5 video: {e!s}")
+
+
+async def generate_kandinsky5_batch(
+    prompts: list[str],
+    duration: int = 5,
+    num_steps: int = 50,
+) -> list[Path]:
+    """
+    Generate multiple videos using the Kandinsky-5 batch API.
+
+    Args:
+        prompts: List of text descriptions for videos to generate
+        duration: Duration of each video in seconds (must be 5 or 10)
+        num_steps: Number of inference steps (default: 50)
+
+    Returns:
+        List of paths to the saved video files
+
+    Raises:
+        ValueError: If duration is not 5 or 10
+        RuntimeError: If API call fails or returns invalid data
+    """
+    api_url = "https://archer.tailfd5df.ts.net:8443"
+
+    # Validate duration
+    if duration not in [5, 10]:
+        raise ValueError(f"Duration must be 5 or 10 seconds, got {duration}")
+
+    logger.info(
+        f"Generating Kandinsky-5 batch: {len(prompts)} videos, "
+        f"duration={duration}s, steps={num_steps}"
+    )
+
+    payload = {
+        "prompts": prompts,
+        "duration": duration,
+        "num_steps": num_steps,
+    }
+
+    async with httpx.AsyncClient(timeout=600.0) as client:
+        try:
+            response = await client.post(f"{api_url}/generate/batch", json=payload)
+            response.raise_for_status()
+
+            data: dict[str, Any] = response.json()
+
+            if "videos" not in data or not data["videos"]:
+                logger.error("Kandinsky-5 batch API response missing video data")
+                raise RuntimeError("Kandinsky-5 API did not return any videos")
+
+            # Create cache directory
+            cache_dir: Path = Path(".cache/kandinsky5")
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            # Decode and save all videos
+            video_paths: list[Path] = []
+
+            for i, video_data in enumerate(data["videos"]):
+                video_base64 = video_data.get("video_base64")
+                video_prompt = video_data.get("prompt", prompts[i] if i < len(prompts) else "unknown")
+
+                if not video_base64:
+                    logger.warning(f"Video {i} missing base64 data, skipping")
+                    continue
+
+                # Decode video
+                video_bytes: bytes = base64.b64decode(video_base64)
+
+                # Generate filename
+                safe_prompt = "".join(c if c.isalnum() else "_" for c in video_prompt[:30])
+                filename = f"kandinsky5_batch_{i:04d}_{safe_prompt}.mp4"
+                file_path = cache_dir / filename
+
+                with open(file_path, "wb") as f:
+                    f.write(video_bytes)
+
+                video_paths.append(file_path)
+                logger.info(f"Kandinsky-5 batch video {i+1}/{len(data['videos'])} saved: {file_path}")
+
+            logger.info(
+                f"Kandinsky-5 batch generation complete. Generated {len(video_paths)} videos."
+            )
+            return video_paths
+
+        except httpx.ConnectError:
+            logger.exception(f"Cannot connect to Kandinsky-5 API at {api_url}")
+            raise RuntimeError(
+                f"Cannot connect to Kandinsky-5 API at {api_url}. Please check if it's running."
+            )
+        except httpx.HTTPStatusError as e:
+            logger.exception(
+                f"Kandinsky-5 API HTTP error: {e.response.status_code} - {e.response.text}"
+            )
+            raise RuntimeError(
+                f"Kandinsky-5 API error: {e.response.status_code} - {e.response.text}"
+            )
+        except Exception as e:
+            logger.exception(f"Error generating Kandinsky-5 batch videos: {e}")
+            raise RuntimeError(f"Failed to generate Kandinsky-5 batch videos: {e!s}")
