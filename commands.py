@@ -17,7 +17,6 @@ from typing import (
     Any,
     Final,
     Literal,
-    cast,
 )
 
 import discord
@@ -46,6 +45,8 @@ COMMANDS_INFO: Final[dict[str, str]] = {
     "rembg": "Remove image background using Rembg.",
     "gptimg": "Generate or edit images using OpenAI's GPT Image model.",
     "t2v": "Generate text-to-video using WAN models.",
+    "kandinsky5": "Generate a video using Kandinsky-5 text-to-video model.",
+    "kandinsky5_batch": "Generate multiple videos using Kandinsky-5 batch API.",
 }
 
 # Type alias for model choice values
@@ -800,7 +801,7 @@ async def gptimg_command(
     generated_image_path: Path | None = None
 
     initial_message: discord.WebhookMessage | None = None
-    
+
     # Check if the message will exceed Discord's 2000 character limit
     escaped_prompt = discord.utils.escape_markdown(prompt)
     progress_message_content: str = (
@@ -810,7 +811,7 @@ async def gptimg_command(
         f"**Settings:** Size: {size} | Quality: {quality}"
         + (f" | Images: {len(edit_images)}" if is_editing else "")
     )
-    
+
     # Check length and provide clear error if too long
     if len(progress_message_content) > 2000:
         error_msg = (
@@ -1018,7 +1019,7 @@ async def gptimg_command(
             f"**Settings:** Model: {model} | Size: {size} | Quality: {quality}"
             + (f" | Images: {len(edit_images)}" if is_editing else "")
             + (f" | Transparent: {transparent_background}" if not is_editing else "")
-            + f"\n**Format:** PNG (supports transparency)"
+            + "\n**Format:** PNG (supports transparency)"
         )
 
         await interaction.followup.send(
@@ -1077,3 +1078,185 @@ async def gptimg_command(
                 logger.exception(f"gptimg: Error during final task cleanup: {e_gather}")
 
         return None
+
+
+@app_commands.command(
+    name="kandinsky5", description="Generate a video using Kandinsky-5 text-to-video model"
+)
+@app_commands.describe(
+    prompt="Text description of the video to generate",
+    duration="Duration of the video in seconds (5 or 10)",
+    num_steps="Number of inference steps (default: 50, higher = better quality but slower)",
+)
+@app_commands.choices(
+    duration=[
+        app_commands.Choice(name="5 seconds", value=5),
+        app_commands.Choice(name="10 seconds", value=10),
+    ]
+)
+async def kandinsky5_command(
+    interaction: discord.Interaction,
+    prompt: str,
+    duration: int = 5,
+    num_steps: int = 50,
+) -> None:
+    """Generate a video using Kandinsky-5 text-to-video model."""
+    await interaction.response.defer(thinking=True)
+
+    try:
+        logger.info(
+            f"kandinsky5: User {interaction.user} requested video generation. "
+            f"Prompt: '{prompt[:50]}...', Duration: {duration}s, Steps: {num_steps}"
+        )
+
+        start_time = time.time()
+
+        # Send initial status message
+        status_msg = await interaction.followup.send(
+            f"🎬 Generating video with Kandinsky-5...\n"
+            f"**Prompt:** {discord.utils.escape_markdown(prompt[:100])}\n"
+            f"**Duration:** {duration}s | **Steps:** {num_steps}\n"
+            f"⏳ This may take a few minutes...",
+            wait=True,
+        )
+
+        # Generate the video
+        video_path = await services.generate_kandinsky5_video(
+            prompt=prompt,
+            duration=duration,
+            num_steps=num_steps,
+        )
+
+        # Calculate generation time
+        total_time = time.time() - start_time
+        mins, secs = divmod(int(total_time), 60)
+
+        # Send the video
+        discord_file = discord.File(video_path, filename=video_path.name)
+        final_message = (
+            f"✅ Video generation complete! (Took {mins}m {secs}s)\n\n"
+            f"**Prompt:** {discord.utils.escape_markdown(prompt)}\n"
+            f"**Settings:** Duration: {duration}s | Steps: {num_steps}\n"
+            f"**Format:** MP4"
+        )
+
+        await interaction.followup.send(content=final_message, file=discord_file)
+
+        # Delete status message
+        try:
+            await status_msg.delete()
+        except discord.HTTPException as e:
+            logger.warning(f"kandinsky5: Could not delete status message: {e}")
+
+    except RuntimeError as re:
+        logger.exception(f"kandinsky5: Runtime error - {re}")
+        await interaction.followup.send(f"❌ Error generating video: {re}", ephemeral=True)
+    except Exception as e:
+        logger.exception(f"kandinsky5: Unexpected error during video generation: {e}")
+        await interaction.followup.send(
+            f"❌ An unexpected error occurred: {e!s}", ephemeral=True
+        )
+
+
+@app_commands.command(
+    name="kandinsky5_batch",
+    description="Generate multiple videos using Kandinsky-5 batch API",
+)
+@app_commands.describe(
+    prompts="Comma-separated list of video descriptions",
+    duration="Duration of each video in seconds (5 or 10)",
+    num_steps="Number of inference steps (default: 50)",
+)
+@app_commands.choices(
+    duration=[
+        app_commands.Choice(name="5 seconds", value=5),
+        app_commands.Choice(name="10 seconds", value=10),
+    ]
+)
+async def kandinsky5_batch_command(
+    interaction: discord.Interaction,
+    prompts: str,
+    duration: int = 5,
+    num_steps: int = 50,
+) -> None:
+    """Generate multiple videos using Kandinsky-5 batch API."""
+    await interaction.response.defer(thinking=True)
+
+    try:
+        # Parse prompts
+        prompt_list = [p.strip() for p in prompts.split(",") if p.strip()]
+
+        if not prompt_list:
+            await interaction.followup.send(
+                "❌ Please provide at least one prompt.", ephemeral=True
+            )
+            return
+
+        if len(prompt_list) > 10:
+            await interaction.followup.send(
+                "❌ Maximum 10 prompts allowed per batch.", ephemeral=True
+            )
+            return
+
+        logger.info(
+            f"kandinsky5_batch: User {interaction.user} requested batch generation. "
+            f"Prompts: {len(prompt_list)}, Duration: {duration}s, Steps: {num_steps}"
+        )
+
+        start_time = time.time()
+
+        # Send initial status message
+        status_msg = await interaction.followup.send(
+            f"🎬 Generating {len(prompt_list)} videos with Kandinsky-5...\n"
+            f"**Duration:** {duration}s | **Steps:** {num_steps}\n"
+            f"⏳ This may take several minutes...",
+            wait=True,
+        )
+
+        # Generate the videos
+        video_paths = await services.generate_kandinsky5_batch(
+            prompts=prompt_list,
+            duration=duration,
+            num_steps=num_steps,
+        )
+
+        # Calculate generation time
+        total_time = time.time() - start_time
+        mins, secs = divmod(int(total_time), 60)
+
+        # Send the videos (Discord has a 10 file limit per message)
+        files_per_message = 10
+        for i in range(0, len(video_paths), files_per_message):
+            batch = video_paths[i : i + files_per_message]
+            discord_files = [discord.File(path, filename=path.name) for path in batch]
+
+            message_content = ""
+            if i == 0:
+                # First message includes summary
+                message_content = (
+                    f"✅ Batch video generation complete! (Took {mins}m {secs}s)\n"
+                    f"**Generated {len(video_paths)} videos**\n"
+                    f"**Settings:** Duration: {duration}s | Steps: {num_steps}\n"
+                    f"**Format:** MP4"
+                )
+            else:
+                message_content = f"Videos {i+1}-{min(i+len(batch), len(video_paths))}"
+
+            await interaction.followup.send(content=message_content, files=discord_files)
+
+        # Delete status message
+        try:
+            await status_msg.delete()
+        except discord.HTTPException as e:
+            logger.warning(f"kandinsky5_batch: Could not delete status message: {e}")
+
+    except RuntimeError as re:
+        logger.exception(f"kandinsky5_batch: Runtime error - {re}")
+        await interaction.followup.send(
+            f"❌ Error generating videos: {re}", ephemeral=True
+        )
+    except Exception as e:
+        logger.exception(f"kandinsky5_batch: Unexpected error during batch generation: {e}")
+        await interaction.followup.send(
+            f"❌ An unexpected error occurred: {e!s}", ephemeral=True
+        )
