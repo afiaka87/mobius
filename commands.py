@@ -1147,25 +1147,20 @@ async def gptimg_command(
 )
 @app_commands.describe(
     prompt="Text description of the video to generate",
-    duration="Duration of the video in seconds (5 or 10)",
     num_steps="Number of inference steps (default: 50, higher = better quality but slower)",
     seed="Random seed for reproducible results (optional)",
-)
-@app_commands.choices(
-    duration=[
-        app_commands.Choice(name="5 seconds", value=5),
-        app_commands.Choice(name="10 seconds", value=10),
-    ]
 )
 async def kandinsky5_command(
     interaction: discord.Interaction,
     prompt: str,
-    duration: int = 5,
     num_steps: int = 50,
     seed: int | None = None,
 ) -> None:
     """Generate a video using Kandinsky-5 text-to-video model."""
     await interaction.response.defer(thinking=True)
+
+    # Always use 5 second duration
+    duration = 5
 
     try:
         logger.info(
@@ -1329,25 +1324,20 @@ async def kandinsky5_command(
 )
 @app_commands.describe(
     prompts="Comma-separated list of video descriptions",
-    duration="Duration of each video in seconds (5 or 10)",
     num_steps="Number of inference steps (default: 50)",
     seed="Starting seed for batch (auto-increments for each video, optional)",
-)
-@app_commands.choices(
-    duration=[
-        app_commands.Choice(name="5 seconds", value=5),
-        app_commands.Choice(name="10 seconds", value=10),
-    ]
 )
 async def kandinsky5_batch_command(
     interaction: discord.Interaction,
     prompts: str,
-    duration: int = 5,
     num_steps: int = 50,
     seed: int | None = None,
 ) -> None:
     """Generate multiple videos using Kandinsky-5 batch API."""
     await interaction.response.defer(thinking=True)
+
+    # Always use 5 second duration
+    duration = 5
 
     try:
         # Parse prompts
