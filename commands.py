@@ -30,6 +30,67 @@ from tasks import TaskProgress, TaskStatus
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+
+# Kandinsky5 ETA estimates based on empirical testing
+# Format: (duration_seconds, num_steps) -> eta_minutes
+KANDINSKY5_ETA_MAP = {
+    # 5 second duration
+    (5, 10): 1.0,
+    (5, 25): 2.5,
+    (5, 50): 5.0,
+    # 10 second duration
+    (10, 10): 2.4,
+    (10, 25): 6.0,
+    (10, 50): 12.0,
+}
+
+
+def estimate_kandinsky5_eta(duration: int, num_steps: int) -> float:
+    """
+    Estimate video generation time based on duration and steps.
+
+    Uses empirical timing data with linear interpolation for intermediate values.
+
+    Args:
+        duration: Video duration in seconds (5 or 10)
+        num_steps: Number of inference steps
+
+    Returns:
+        Estimated time in minutes
+    """
+    # Check for exact match
+    if (duration, num_steps) in KANDINSKY5_ETA_MAP:
+        return KANDINSKY5_ETA_MAP[(duration, num_steps)]
+
+    # Interpolate based on steps for the given duration
+    duration_etas = {steps: eta for (d, steps), eta in KANDINSKY5_ETA_MAP.items() if d == duration}
+
+    if not duration_etas:
+        # Fallback if duration not in map
+        return num_steps * 0.12  # Rough average
+
+    steps_list = sorted(duration_etas.keys())
+
+    # If below minimum steps, extrapolate
+    if num_steps <= steps_list[0]:
+        return duration_etas[steps_list[0]] * (num_steps / steps_list[0])
+
+    # If above maximum steps, extrapolate
+    if num_steps >= steps_list[-1]:
+        return duration_etas[steps_list[-1]] * (num_steps / steps_list[-1])
+
+    # Interpolate between two known points
+    for i in range(len(steps_list) - 1):
+        step_low, step_high = steps_list[i], steps_list[i + 1]
+        if step_low <= num_steps <= step_high:
+            eta_low, eta_high = duration_etas[step_low], duration_etas[step_high]
+            # Linear interpolation
+            ratio = (num_steps - step_low) / (step_high - step_low)
+            return eta_low + (eta_high - eta_low) * ratio
+
+    # Fallback
+    return num_steps * 0.12
+
 # Command descriptions for the /help command
 COMMANDS_INFO: Final[dict[str, str]] = {
     "help": "List all commands and their descriptions.",
@@ -1124,13 +1185,17 @@ async def kandinsky5_command(
         last_followup_time = time.time()
         last_keepalive_msg = None
 
+        # Calculate estimated ETA
+        estimated_eta_mins = estimate_kandinsky5_eta(duration, num_steps)
+        eta_display = f"{estimated_eta_mins:.1f} minutes" if estimated_eta_mins >= 1 else f"{int(estimated_eta_mins * 60)} seconds"
+
         # Send initial status message
         seed_info = f" | **Seed:** {seed}" if seed is not None else ""
         status_msg = await interaction.followup.send(
             f"🎬 Generating video with Kandinsky-5...\n"
             f"**Prompt:** {discord.utils.escape_markdown(prompt[:100])}\n"
             f"**Duration:** {duration}s | **Steps:** {num_steps}{seed_info}\n"
-            f"⏳ Submitting task...",
+            f"⏳ Submitting task... (ETA: ~{eta_display})",
             wait=True,
         )
 
@@ -1158,14 +1223,8 @@ async def kandinsky5_command(
             if progress.progress_percent is not None:
                 progress_str = f" ({progress.progress_percent}%)"
 
-            # Build ETA string
-            eta_str = ""
-            if progress.eta_seconds is not None and progress.eta_seconds > 0:
-                eta_mins, eta_secs = divmod(progress.eta_seconds, 60)
-                if eta_mins > 0:
-                    eta_str = f"\n⏱️ ETA: ~{eta_mins}m {eta_secs}s"
-                else:
-                    eta_str = f"\n⏱️ ETA: ~{eta_secs}s"
+            # Build time display with ETA
+            time_display = f"🕐 Elapsed: {elapsed_str} / ETA: ~{eta_display}"
 
             # Build message
             message_str = ""
@@ -1176,7 +1235,7 @@ async def kandinsky5_command(
                 f"{status_emoji} **{status_text}** video with Kandinsky-5{progress_str}\n"
                 f"**Prompt:** {discord.utils.escape_markdown(prompt[:100])}\n"
                 f"**Duration:** {duration}s | **Steps:** {num_steps}{seed_info}\n"
-                f"🕐 Elapsed: {elapsed_str}{eta_str}{message_str}"
+                f"{time_display}{message_str}"
             )
 
             # Discord interaction tokens expire after 15 minutes
@@ -1193,7 +1252,7 @@ async def kandinsky5_command(
                 # Send new keepalive
                 try:
                     last_keepalive_msg = await interaction.followup.send(
-                        f"⏳ Still working on your video... (Elapsed: {elapsed_str})",
+                        f"⏳ Still working on your video... (Elapsed: {elapsed_str} / ETA: ~{eta_display})",
                         ephemeral=True,
                         wait=True
                     )
@@ -1323,12 +1382,16 @@ async def kandinsky5_batch_command(
         last_followup_time = time.time()
         last_keepalive_msg = None
 
+        # Calculate estimated ETA for batch (multiply by number of videos)
+        estimated_eta_mins = estimate_kandinsky5_eta(duration, num_steps) * len(prompt_list)
+        eta_display = f"{estimated_eta_mins:.1f} minutes" if estimated_eta_mins >= 1 else f"{int(estimated_eta_mins * 60)} seconds"
+
         # Send initial status message
         seed_info = f" | **Seed:** {seed} (auto-incrementing)" if seed is not None else ""
         status_msg = await interaction.followup.send(
             f"🎬 Generating {len(prompt_list)} videos with Kandinsky-5...\n"
             f"**Duration:** {duration}s | **Steps:** {num_steps}{seed_info}\n"
-            f"⏳ Submitting batch task...",
+            f"⏳ Submitting batch task... (ETA: ~{eta_display})",
             wait=True,
         )
 
@@ -1356,14 +1419,8 @@ async def kandinsky5_batch_command(
             if progress.progress_percent is not None:
                 progress_str = f" ({progress.progress_percent}%)"
 
-            # Build ETA string
-            eta_str = ""
-            if progress.eta_seconds is not None and progress.eta_seconds > 0:
-                eta_mins, eta_secs = divmod(progress.eta_seconds, 60)
-                if eta_mins > 0:
-                    eta_str = f"\n⏱️ ETA: ~{eta_mins}m {eta_secs}s"
-                else:
-                    eta_str = f"\n⏱️ ETA: ~{eta_secs}s"
+            # Build time display with ETA
+            time_display = f"🕐 Elapsed: {elapsed_str} / ETA: ~{eta_display}"
 
             # Build message
             message_str = ""
@@ -1373,7 +1430,7 @@ async def kandinsky5_batch_command(
             updated_content = (
                 f"{status_emoji} **{status_text}** {len(prompt_list)} videos with Kandinsky-5{progress_str}\n"
                 f"**Duration:** {duration}s | **Steps:** {num_steps}{seed_info}\n"
-                f"🕐 Elapsed: {elapsed_str}{eta_str}{message_str}"
+                f"{time_display}{message_str}"
             )
 
             # Discord interaction tokens expire after 15 minutes
@@ -1390,7 +1447,7 @@ async def kandinsky5_batch_command(
                 # Send new keepalive
                 try:
                     last_keepalive_msg = await interaction.followup.send(
-                        f"⏳ Still working on your {len(prompt_list)} videos... (Elapsed: {elapsed_str})",
+                        f"⏳ Still working on your {len(prompt_list)} videos... (Elapsed: {elapsed_str} / ETA: ~{eta_display})",
                         ephemeral=True,
                         wait=True
                     )
