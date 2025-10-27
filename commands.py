@@ -1213,11 +1213,6 @@ async def kandinsky5_command(
                 status_emoji = "⏳"
                 status_text = progress.status.value.title()
 
-            # Build progress string
-            progress_str = ""
-            if progress.progress_percent is not None:
-                progress_str = f" ({progress.progress_percent}%)"
-
             # Build time display with ETA
             time_display = f"🕐 Elapsed: {elapsed_str} / ETA: ~{eta_display}"
 
@@ -1227,7 +1222,7 @@ async def kandinsky5_command(
                 message_str = f"\n💬 {progress.message}"
 
             updated_content = (
-                f"{status_emoji} **{status_text}** video with Kandinsky-5{progress_str}\n"
+                f"{status_emoji} **{status_text}** video with Kandinsky-5\n"
                 f"**Prompt:** {discord.utils.escape_markdown(prompt[:100])}\n"
                 f"**Duration:** {duration}s | **Steps:** {num_steps}{seed_info}\n"
                 f"{time_display}{message_str}"
@@ -1404,11 +1399,6 @@ async def kandinsky5_batch_command(
                 status_emoji = "⏳"
                 status_text = progress.status.value.title()
 
-            # Build progress string
-            progress_str = ""
-            if progress.progress_percent is not None:
-                progress_str = f" ({progress.progress_percent}%)"
-
             # Build time display with ETA
             time_display = f"🕐 Elapsed: {elapsed_str} / ETA: ~{eta_display}"
 
@@ -1418,7 +1408,7 @@ async def kandinsky5_batch_command(
                 message_str = f"\n💬 {progress.message}"
 
             updated_content = (
-                f"{status_emoji} **{status_text}** {len(prompt_list)} videos with Kandinsky-5{progress_str}\n"
+                f"{status_emoji} **{status_text}** {len(prompt_list)} videos with Kandinsky-5\n"
                 f"**Duration:** {duration}s | **Steps:** {num_steps}{seed_info}\n"
                 f"{time_display}{message_str}"
             )
