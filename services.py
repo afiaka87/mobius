@@ -1701,7 +1701,7 @@ async def check_kandinsky5_health() -> bool:
         logger.warning(f"Kandinsky-5 API health check: HTTP error {e.response.status_code}")
         return False
     except Exception as e:
-        logger.warning(f"Kandinsky-5 API health check: Unexpected error - {e}")
+        logger.exception(f"Kandinsky-5 API health check: Unexpected error - {type(e).__name__}: {e}")
         return False
 
 
