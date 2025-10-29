@@ -1697,6 +1697,9 @@ async def check_kandinsky5_health() -> bool:
     except httpx.ConnectError:
         logger.warning(f"Kandinsky-5 API health check: Cannot connect to {api_url}")
         return False
+    except httpx.TimeoutException:
+        logger.warning(f"Kandinsky-5 API health check: Connection timeout to {api_url}")
+        return False
     except httpx.HTTPStatusError as e:
         logger.warning(f"Kandinsky-5 API health check: HTTP error {e.response.status_code}")
         return False
