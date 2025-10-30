@@ -1678,7 +1678,6 @@ async def check_kandinsky5_health() -> bool:
         True if the API is healthy, False otherwise
     """
     api_url = "http://100.70.95.57:8888"
-
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{api_url}/health")
@@ -1708,8 +1707,13 @@ async def check_kandinsky5_health() -> bool:
 
 async def generate_kandinsky5_video(
     prompt: str,
+    negative_prompt: str | None = None,
     duration: int = 5,
+    width: int = 512,
+    height: int = 512,
     num_steps: int = 50,
+    guidance_weight: float | None = None,
+    scheduler_scale: float = 5.0,
     seed: int | None = None,
     progress_callback: Any = None,
 ) -> Path:
@@ -1718,8 +1722,13 @@ async def generate_kandinsky5_video(
 
     Args:
         prompt: Text description of the video to generate
+        negative_prompt: Optional negative guidance to avoid certain content
         duration: Duration of the video in seconds (must be 5 or 10)
+        width: Video width in pixels (512 or 768, default: 512)
+        height: Video height in pixels (512 or 768, default: 512)
         num_steps: Number of inference steps (default: 50)
+        guidance_weight: Optional CFG weight (default: None, uses model default)
+        scheduler_scale: Flow matching scheduler scale (default: 5.0)
         seed: Optional random seed for reproducible results
         progress_callback: Optional async callback function(TaskProgress) for progress updates
 
@@ -1727,7 +1736,7 @@ async def generate_kandinsky5_video(
         Path to the saved video file
 
     Raises:
-        ValueError: If duration is not 5 or 10
+        ValueError: If duration is not 5 or 10, or if width/height are invalid
         RuntimeError: If API call fails or returns invalid data
     """
     api_url = "http://100.70.95.57:8888"
@@ -1736,16 +1745,32 @@ async def generate_kandinsky5_video(
     if duration not in [5, 10]:
         raise ValueError(f"Duration must be 5 or 10 seconds, got {duration}")
 
+    # Validate resolution (API supports 512 or 768 for each dimension)
+    if width not in [512, 768]:
+        raise ValueError(f"Width must be 512 or 768, got {width}")
+    if height not in [512, 768]:
+        raise ValueError(f"Height must be 512 or 768, got {height}")
+
     logger.info(
         f"Generating Kandinsky-5 video: prompt='{prompt[:50]}...', "
-        f"duration={duration}s, steps={num_steps}, seed={seed}"
+        f"duration={duration}s, resolution={width}x{height}, steps={num_steps}, "
+        f"guidance_weight={guidance_weight}, scheduler_scale={scheduler_scale}, seed={seed}"
     )
 
     payload = {
         "prompt": prompt,
         "duration": duration,
+        "width": width,
+        "height": height,
         "num_steps": num_steps,
+        "scheduler_scale": scheduler_scale,
     }
+
+    # Add optional parameters if provided
+    if negative_prompt:
+        payload["negative_prompt"] = negative_prompt
+    if guidance_weight is not None:
+        payload["guidance_weight"] = guidance_weight
     if seed is not None:
         payload["seed"] = seed
 
@@ -1820,8 +1845,13 @@ async def generate_kandinsky5_video(
 
 async def generate_kandinsky5_batch(
     prompts: list[str],
+    negative_prompt: str | None = None,
     duration: int = 5,
+    width: int = 512,
+    height: int = 512,
     num_steps: int = 50,
+    guidance_weight: float | None = None,
+    scheduler_scale: float = 5.0,
     seed: int | None = None,
     progress_callback: Any = None,
 ) -> list[Path]:
@@ -1830,8 +1860,13 @@ async def generate_kandinsky5_batch(
 
     Args:
         prompts: List of text descriptions for videos to generate
+        negative_prompt: Optional negative guidance applied to all videos
         duration: Duration of each video in seconds (must be 5 or 10)
+        width: Video width in pixels (512 or 768, default: 512)
+        height: Video height in pixels (512 or 768, default: 512)
         num_steps: Number of inference steps (default: 50)
+        guidance_weight: Optional CFG weight (default: None, uses model default)
+        scheduler_scale: Flow matching scheduler scale (default: 5.0)
         seed: Optional starting seed for batch (auto-increments for each video)
         progress_callback: Optional async callback function(TaskProgress) for progress updates
 
@@ -1839,7 +1874,7 @@ async def generate_kandinsky5_batch(
         List of paths to the saved video files
 
     Raises:
-        ValueError: If duration is not 5 or 10
+        ValueError: If duration is not 5 or 10, or if width/height are invalid
         RuntimeError: If API call fails or returns invalid data
     """
     api_url = "http://100.70.95.57:8888"
@@ -1848,16 +1883,32 @@ async def generate_kandinsky5_batch(
     if duration not in [5, 10]:
         raise ValueError(f"Duration must be 5 or 10 seconds, got {duration}")
 
+    # Validate resolution
+    if width not in [512, 768]:
+        raise ValueError(f"Width must be 512 or 768, got {width}")
+    if height not in [512, 768]:
+        raise ValueError(f"Height must be 512 or 768, got {height}")
+
     logger.info(
         f"Generating Kandinsky-5 batch: {len(prompts)} videos, "
-        f"duration={duration}s, steps={num_steps}, seed={seed}"
+        f"duration={duration}s, resolution={width}x{height}, steps={num_steps}, "
+        f"guidance_weight={guidance_weight}, scheduler_scale={scheduler_scale}, seed={seed}"
     )
 
     payload = {
         "prompts": prompts,
         "duration": duration,
+        "width": width,
+        "height": height,
         "num_steps": num_steps,
+        "scheduler_scale": scheduler_scale,
     }
+
+    # Add optional parameters if provided
+    if negative_prompt:
+        payload["negative_prompt"] = negative_prompt
+    if guidance_weight is not None:
+        payload["guidance_weight"] = guidance_weight
     if seed is not None:
         payload["seed"] = seed
 
