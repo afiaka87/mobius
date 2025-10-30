@@ -1147,20 +1147,43 @@ async def gptimg_command(
 )
 @app_commands.describe(
     prompt="Text description of the video to generate",
+    negative_prompt="Describe what to avoid in the video (optional)",
+    duration="Video duration in seconds (5 or 10, default: 5)",
+    width="Video width in pixels (512 or 768, default: 512)",
+    height="Video height in pixels (512 or 768, default: 512)",
     num_steps="Number of inference steps (default: 50, higher = better quality but slower)",
+    guidance_weight="CFG weight for prompt adherence (optional, uses model default if not set)",
+    scheduler_scale="Flow matching scheduler scale (default: 5.0, advanced parameter)",
     seed="Random seed for reproducible results (optional)",
+)
+@app_commands.choices(
+    duration=[
+        app_commands.Choice(name="5 seconds (faster)", value=5),
+        app_commands.Choice(name="10 seconds", value=10),
+    ],
+    width=[
+        app_commands.Choice(name="512px", value=512),
+        app_commands.Choice(name="768px", value=768),
+    ],
+    height=[
+        app_commands.Choice(name="512px", value=512),
+        app_commands.Choice(name="768px", value=768),
+    ],
 )
 async def kandinsky5_command(
     interaction: discord.Interaction,
     prompt: str,
-    num_steps: int = 50,
+    negative_prompt: str | None = None,
+    duration: int = 5,
+    width: int = 512,
+    height: int = 512,
+    num_steps: app_commands.Range[int, 10, 100] = 50,
+    guidance_weight: app_commands.Range[float, 1.0, 3.0] | None = None,
+    scheduler_scale: app_commands.Range[float, 1.0, 10.0] = 5.0,
     seed: int | None = None,
 ) -> None:
     """Generate a video using Kandinsky-5 text-to-video model."""
     await interaction.response.defer(thinking=True)
-
-    # Always use 5 second duration
-    duration = 5
 
     try:
         logger.info(
@@ -1186,10 +1209,11 @@ async def kandinsky5_command(
 
         # Send initial status message
         seed_info = f" | **Seed:** {seed}" if seed is not None else ""
+        guidance_info = f" | **CFG:** {guidance_weight}" if guidance_weight is not None else ""
         status_msg = await interaction.followup.send(
             f"🎬 Generating video with Kandinsky-5...\n"
             f"**Prompt:** {discord.utils.escape_markdown(prompt[:100])}\n"
-            f"**Duration:** {duration}s | **Steps:** {num_steps}{seed_info}\n"
+            f"**Resolution:** {width}x{height} | **Duration:** {duration}s | **Steps:** {num_steps}{guidance_info}{seed_info}\n"
             f"⏳ Submitting task... (ETA: ~{eta_display})",
             wait=True,
         )
@@ -1224,7 +1248,7 @@ async def kandinsky5_command(
             updated_content = (
                 f"{status_emoji} **{status_text}** video with Kandinsky-5\n"
                 f"**Prompt:** {discord.utils.escape_markdown(prompt[:100])}\n"
-                f"**Duration:** {duration}s | **Steps:** {num_steps}{seed_info}\n"
+                f"**Resolution:** {width}x{height} | **Duration:** {duration}s | **Steps:** {num_steps}{guidance_info}{seed_info}\n"
                 f"{time_display}{message_str}"
             )
 
@@ -1259,8 +1283,13 @@ async def kandinsky5_command(
         # Generate the video with progress updates
         video_path = await services.generate_kandinsky5_video(
             prompt=prompt,
+            negative_prompt=negative_prompt,
             duration=duration,
+            width=width,
+            height=height,
             num_steps=num_steps,
+            guidance_weight=guidance_weight,
+            scheduler_scale=scheduler_scale,
             seed=seed,
             progress_callback=on_progress,
         )
@@ -1279,10 +1308,12 @@ async def kandinsky5_command(
         # Send the video
         discord_file = discord.File(video_path, filename=video_path.name)
         seed_info = f" | Seed: {seed}" if seed is not None else ""
+        guidance_info = f" | CFG: {guidance_weight}" if guidance_weight is not None else ""
+        neg_prompt_info = f"\n**Negative Prompt:** {discord.utils.escape_markdown(negative_prompt)}" if negative_prompt else ""
         final_message = (
             f"✅ Video generation complete for {interaction.user.mention}! (Took {mins}m {secs}s)\n\n"
-            f"**Prompt:** {discord.utils.escape_markdown(prompt)}\n"
-            f"**Settings:** Duration: {duration}s | Steps: {num_steps}{seed_info}\n"
+            f"**Prompt:** {discord.utils.escape_markdown(prompt)}{neg_prompt_info}\n"
+            f"**Settings:** {width}x{height} | Duration: {duration}s | Steps: {num_steps}{guidance_info}{seed_info}\n"
             f"**Format:** MP4"
         )
 
@@ -1319,20 +1350,43 @@ async def kandinsky5_command(
 )
 @app_commands.describe(
     prompts="Comma-separated list of video descriptions",
+    negative_prompt="Describe what to avoid in all videos (optional)",
+    duration="Video duration in seconds (5 or 10, default: 5)",
+    width="Video width in pixels (512 or 768, default: 512)",
+    height="Video height in pixels (512 or 768, default: 512)",
     num_steps="Number of inference steps (default: 50)",
+    guidance_weight="CFG weight for prompt adherence (optional, uses model default if not set)",
+    scheduler_scale="Flow matching scheduler scale (default: 5.0, advanced parameter)",
     seed="Starting seed for batch (auto-increments for each video, optional)",
+)
+@app_commands.choices(
+    duration=[
+        app_commands.Choice(name="5 seconds (faster)", value=5),
+        app_commands.Choice(name="10 seconds", value=10),
+    ],
+    width=[
+        app_commands.Choice(name="512px", value=512),
+        app_commands.Choice(name="768px", value=768),
+    ],
+    height=[
+        app_commands.Choice(name="512px", value=512),
+        app_commands.Choice(name="768px", value=768),
+    ],
 )
 async def kandinsky5_batch_command(
     interaction: discord.Interaction,
     prompts: str,
-    num_steps: int = 50,
+    negative_prompt: str | None = None,
+    duration: int = 5,
+    width: int = 512,
+    height: int = 512,
+    num_steps: app_commands.Range[int, 10, 100] = 50,
+    guidance_weight: app_commands.Range[float, 1.0, 3.0] | None = None,
+    scheduler_scale: app_commands.Range[float, 1.0, 10.0] = 5.0,
     seed: int | None = None,
 ) -> None:
     """Generate multiple videos using Kandinsky-5 batch API."""
     await interaction.response.defer(thinking=True)
-
-    # Always use 5 second duration
-    duration = 5
 
     try:
         # Parse prompts
@@ -1373,9 +1427,10 @@ async def kandinsky5_batch_command(
 
         # Send initial status message
         seed_info = f" | **Seed:** {seed} (auto-incrementing)" if seed is not None else ""
+        guidance_info = f" | **CFG:** {guidance_weight}" if guidance_weight is not None else ""
         status_msg = await interaction.followup.send(
             f"🎬 Generating {len(prompt_list)} videos with Kandinsky-5...\n"
-            f"**Duration:** {duration}s | **Steps:** {num_steps}{seed_info}\n"
+            f"**Resolution:** {width}x{height} | **Duration:** {duration}s | **Steps:** {num_steps}{guidance_info}{seed_info}\n"
             f"⏳ Submitting batch task... (ETA: ~{eta_display})",
             wait=True,
         )
@@ -1409,7 +1464,7 @@ async def kandinsky5_batch_command(
 
             updated_content = (
                 f"{status_emoji} **{status_text}** {len(prompt_list)} videos with Kandinsky-5\n"
-                f"**Duration:** {duration}s | **Steps:** {num_steps}{seed_info}\n"
+                f"**Resolution:** {width}x{height} | **Duration:** {duration}s | **Steps:** {num_steps}{guidance_info}{seed_info}\n"
                 f"{time_display}{message_str}"
             )
 
@@ -1444,8 +1499,13 @@ async def kandinsky5_batch_command(
         # Generate the videos with progress updates
         video_paths = await services.generate_kandinsky5_batch(
             prompts=prompt_list,
+            negative_prompt=negative_prompt,
             duration=duration,
+            width=width,
+            height=height,
             num_steps=num_steps,
+            guidance_weight=guidance_weight,
+            scheduler_scale=scheduler_scale,
             seed=seed,
             progress_callback=on_progress,
         )
@@ -1474,10 +1534,12 @@ async def kandinsky5_batch_command(
             if i == 0:
                 # First message includes summary
                 seed_info = f" | Seed: {seed}" if seed is not None else ""
+                guidance_info = f" | CFG: {guidance_weight}" if guidance_weight is not None else ""
+                neg_prompt_info = f"\n**Negative Prompt:** {discord.utils.escape_markdown(negative_prompt)}" if negative_prompt else ""
                 message_content = (
                     f"✅ Batch video generation complete for {interaction.user.mention}! (Took {mins}m {secs}s)\n"
-                    f"**Generated {len(video_paths)} videos**\n"
-                    f"**Settings:** Duration: {duration}s | Steps: {num_steps}{seed_info}\n"
+                    f"**Generated {len(video_paths)} videos**{neg_prompt_info}\n"
+                    f"**Settings:** {width}x{height} | Duration: {duration}s | Steps: {num_steps}{guidance_info}{seed_info}\n"
                     f"**Format:** MP4"
                 )
             else:
