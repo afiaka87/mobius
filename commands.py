@@ -107,8 +107,9 @@ COMMANDS_INFO: Final[dict[str, str]] = {
     "rembg": "Remove image background using Rembg.",
     "gptimg": "Generate or edit images using OpenAI's GPT Image model.",
     "t2v": "Generate text-to-video using WAN models.",
-    "kandinsky5": "Generate a video using Kandinsky-5 text-to-video model.",
-    "kandinsky5_batch": "Generate multiple videos using Kandinsky-5 batch API.",
+    "k5": "Generate a video using Kandinsky-5 text-to-video model.",
+    "k5_list": "List the Kandinsky-5 task queue.",
+    "k5_cancel": "Cancel a pending Kandinsky-5 task by task ID.",
 }
 
 # Type alias for model choice values
@@ -1143,7 +1144,7 @@ async def gptimg_command(
 
 
 @app_commands.command(
-    name="kandinsky5", description="Generate a video using Kandinsky-5 text-to-video model"
+    name="k5", description="Generate a video using Kandinsky-5 text-to-video model"
 )
 @app_commands.describe(
     prompt="Text description of the video to generate",
@@ -1177,9 +1178,9 @@ async def kandinsky5_command(
     duration: int = 5,
     width: int = 512,
     height: int = 512,
-    num_steps: app_commands.Range[int, 10, 100] = 50,
-    guidance_weight: app_commands.Range[float, 1.0, 3.0] | None = None,
-    scheduler_scale: app_commands.Range[float, 1.0, 10.0] = 5.0,
+    num_steps: app_commands.Range[int, 1, 100] = 50,
+    guidance_weight: app_commands.Range[float, 0.0, 100.0] | None = None,
+    scheduler_scale: app_commands.Range[float, 0.0, 100.0] = 5.0,
     seed: int | None = None,
 ) -> None:
     """Generate a video using Kandinsky-5 text-to-video model."""
@@ -1345,235 +1346,94 @@ async def kandinsky5_command(
 
 
 @app_commands.command(
-    name="kandinsky5_batch",
-    description="Generate multiple videos using Kandinsky-5 batch API",
+    name="k5-list", description="List the Kandinsky-5 task queue"
 )
-@app_commands.describe(
-    prompts="Comma-separated list of video descriptions",
-    negative_prompt="Describe what to avoid in all videos (optional)",
-    duration="Video duration in seconds (5 or 10, default: 5)",
-    width="Video width in pixels (512 or 768, default: 512)",
-    height="Video height in pixels (512 or 768, default: 512)",
-    num_steps="Number of inference steps (default: 50)",
-    guidance_weight="CFG weight for prompt adherence (optional, uses model default if not set)",
-    scheduler_scale="Flow matching scheduler scale (default: 5.0, advanced parameter)",
-    seed="Starting seed for batch (auto-increments for each video, optional)",
-)
-@app_commands.choices(
-    duration=[
-        app_commands.Choice(name="5 seconds (faster)", value=5),
-        app_commands.Choice(name="10 seconds", value=10),
-    ],
-    width=[
-        app_commands.Choice(name="512px", value=512),
-        app_commands.Choice(name="768px", value=768),
-    ],
-    height=[
-        app_commands.Choice(name="512px", value=512),
-        app_commands.Choice(name="768px", value=768),
-    ],
-)
-async def kandinsky5_batch_command(
-    interaction: discord.Interaction,
-    prompts: str,
-    negative_prompt: str | None = None,
-    duration: int = 5,
-    width: int = 512,
-    height: int = 512,
-    num_steps: app_commands.Range[int, 10, 100] = 50,
-    guidance_weight: app_commands.Range[float, 1.0, 3.0] | None = None,
-    scheduler_scale: app_commands.Range[float, 1.0, 10.0] = 5.0,
-    seed: int | None = None,
-) -> None:
-    """Generate multiple videos using Kandinsky-5 batch API."""
+async def k5_list_command(interaction: discord.Interaction) -> None:
+    """List all tasks in the Kandinsky-5 queue."""
     await interaction.response.defer(thinking=True)
 
     try:
-        # Parse prompts
-        prompt_list = [p.strip() for p in prompts.split(",") if p.strip()]
+        logger.info(f"k5-list: User {interaction.user} requested queue list")
 
-        if not prompt_list:
-            await interaction.followup.send(
-                "❌ Please provide at least one prompt."
-            )
+        # Get queue from API
+        queue_data = await services.get_kandinsky5_queue()
+
+        tasks = queue_data.get("tasks", [])
+        total_queued = queue_data.get("total_queued", 0)
+        current_task_id = queue_data.get("current_task_id")
+
+        # Build response message
+        if not tasks:
+            await interaction.followup.send("📋 The Kandinsky-5 queue is empty.")
             return
 
-        if len(prompt_list) > 10:
-            await interaction.followup.send(
-                "❌ Maximum 10 prompts allowed per batch."
-            )
-            return
+        # Format the queue display
+        lines = [f"📋 **Kandinsky-5 Queue** ({total_queued} pending):\n"]
 
-        logger.info(
-            f"kandinsky5_batch: User {interaction.user} requested batch generation. "
-            f"Prompts: {len(prompt_list)}, Duration: {duration}s, Steps: {num_steps}, Seed: {seed}"
-        )
+        for task in tasks:
+            task_id = task.get("task_id", "unknown")
+            status = task.get("status", "unknown")
+            position = task.get("position", "?")
+            is_current = task.get("is_current", False)
+            prompt = task.get("prompt", "")
+            task_type = task.get("task_type", "unknown")
+            total_videos = task.get("total_videos", 1)
 
-        # Check API health first
-        is_healthy = await services.check_kandinsky5_health()
-        if not is_healthy:
-            await interaction.followup.send(
-                "⚠️ The Kandinsky-5 API is currently down. Sorry! Please try again later."
-            )
-            return
+            # Format task ID (show first 8 chars)
+            short_id = task_id[:8] if len(task_id) >= 8 else task_id
 
-        start_time = time.time()
-        last_followup_time = time.time()
-        last_keepalive_msg = None
-
-        # Calculate estimated ETA for batch (multiply by number of videos)
-        estimated_eta_mins = estimate_kandinsky5_eta(duration, num_steps) * len(prompt_list)
-        eta_display = f"{estimated_eta_mins:.1f} minutes" if estimated_eta_mins >= 1 else f"{int(estimated_eta_mins * 60)} seconds"
-
-        # Send initial status message
-        seed_info = f" | **Seed:** {seed} (auto-incrementing)" if seed is not None else ""
-        guidance_info = f" | **CFG:** {guidance_weight}" if guidance_weight is not None else ""
-        status_msg = await interaction.followup.send(
-            f"🎬 Generating {len(prompt_list)} videos with Kandinsky-5...\n"
-            f"**Resolution:** {width}x{height} | **Duration:** {duration}s | **Steps:** {num_steps}{guidance_info}{seed_info}\n"
-            f"⏳ Submitting batch task... (ETA: ~{eta_display})",
-            wait=True,
-        )
-
-        # Create progress callback to update Discord message
-        async def on_progress(progress: TaskProgress) -> None:
-            nonlocal last_followup_time, last_keepalive_msg
-            """Update Discord status message with progress."""
-            elapsed = int(time.time() - start_time)
-            mins, secs = divmod(elapsed, 60)
-            elapsed_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
-
-            # Build status emoji
-            if progress.status == TaskStatus.PENDING:
-                status_emoji = "⏳"
-                status_text = "Queued"
-            elif progress.status == TaskStatus.PROCESSING:
-                status_emoji = "🎨"
-                status_text = "Generating"
+            # Format prompt (truncate to 40 chars)
+            if prompt:
+                display_prompt = prompt[:40] + "..." if len(prompt) > 40 else prompt
+                display_prompt = discord.utils.escape_markdown(display_prompt)
             else:
-                status_emoji = "⏳"
-                status_text = progress.status.value.title()
+                display_prompt = f"batch ({total_videos} videos)"
 
-            # Build time display with ETA
-            time_display = f"🕐 Elapsed: {elapsed_str} / ETA: ~{eta_display}"
+            # Add asterisk for currently processing task
+            prefix = "*" if is_current else " "
 
-            # Build message
-            message_str = ""
-            if progress.message:
-                message_str = f"\n💬 {progress.message}"
+            # Format line
+            line = f"{prefix} [{position}] `{short_id}` | {status} | \"{display_prompt}\""
+            lines.append(line)
 
-            updated_content = (
-                f"{status_emoji} **{status_text}** {len(prompt_list)} videos with Kandinsky-5\n"
-                f"**Resolution:** {width}x{height} | **Duration:** {duration}s | **Steps:** {num_steps}{guidance_info}{seed_info}\n"
-                f"{time_display}{message_str}"
-            )
+        message = "\n".join(lines)
 
-            # Discord interaction tokens expire after 15 minutes
-            # Send a new followup every 10 minutes to keep the interaction alive
-            time_since_last_followup = time.time() - last_followup_time
-            if time_since_last_followup > 600:  # 10 minutes
-                # Delete previous keepalive message to reduce spam
-                if last_keepalive_msg:
-                    try:
-                        await last_keepalive_msg.delete()
-                    except discord.HTTPException as e:
-                        logger.warning(f"kandinsky5_batch: Could not delete old keepalive: {e}")
-
-                # Send new keepalive
-                try:
-                    last_keepalive_msg = await interaction.followup.send(
-                        f"⏳ Still working on your {len(prompt_list)} videos... (Elapsed: {elapsed_str} / ETA: ~{eta_display})",
-                        ephemeral=True,
-                        wait=True
-                    )
-                    last_followup_time = time.time()
-                    logger.info(f"kandinsky5_batch: Sent keepalive followup at {elapsed_str}")
-                except discord.HTTPException as e:
-                    logger.warning(f"kandinsky5_batch: Could not send keepalive followup: {e}")
-
-            try:
-                await status_msg.edit(content=updated_content)
-            except discord.HTTPException as e:
-                logger.warning(f"kandinsky5_batch: Could not update status message: {e}")
-
-        # Generate the videos with progress updates
-        video_paths = await services.generate_kandinsky5_batch(
-            prompts=prompt_list,
-            negative_prompt=negative_prompt,
-            duration=duration,
-            width=width,
-            height=height,
-            num_steps=num_steps,
-            guidance_weight=guidance_weight,
-            scheduler_scale=scheduler_scale,
-            seed=seed,
-            progress_callback=on_progress,
-        )
-
-        # Calculate generation time
-        total_time = time.time() - start_time
-        mins, secs = divmod(int(total_time), 60)
-
-        # Clean up keepalive message if it exists
-        if last_keepalive_msg:
-            try:
-                await last_keepalive_msg.delete()
-            except discord.HTTPException as e:
-                logger.warning(f"kandinsky5_batch: Could not delete final keepalive: {e}")
-
-        # Send the videos (Discord has a 10 file limit per message)
-        # For long-running tasks, the interaction token may expire
-        files_per_message = 10
-        interaction_expired = False
-
-        for i in range(0, len(video_paths), files_per_message):
-            batch = video_paths[i : i + files_per_message]
-            discord_files = [discord.File(path, filename=path.name) for path in batch]
-
-            message_content = ""
-            if i == 0:
-                # First message includes summary
-                seed_info = f" | Seed: {seed}" if seed is not None else ""
-                guidance_info = f" | CFG: {guidance_weight}" if guidance_weight is not None else ""
-                neg_prompt_info = f"\n**Negative Prompt:** {discord.utils.escape_markdown(negative_prompt)}" if negative_prompt else ""
-                message_content = (
-                    f"✅ Batch video generation complete for {interaction.user.mention}! (Took {mins}m {secs}s)\n"
-                    f"**Generated {len(video_paths)} videos**{neg_prompt_info}\n"
-                    f"**Settings:** {width}x{height} | Duration: {duration}s | Steps: {num_steps}{guidance_info}{seed_info}\n"
-                    f"**Format:** MP4"
-                )
-            else:
-                message_content = f"Videos {i+1}-{min(i+len(batch), len(video_paths))}"
-
-            try:
-                if not interaction_expired:
-                    await interaction.followup.send(content=message_content, files=discord_files)
-                else:
-                    # Token already expired, send to channel
-                    await interaction.channel.send(content=message_content, files=discord_files)
-            except discord.HTTPException as e:
-                if e.code == 50027:  # Invalid Webhook Token
-                    logger.info(f"kandinsky5_batch: Interaction expired, sending to channel instead")
-                    interaction_expired = True
-                    # Resend this batch to channel
-                    await interaction.channel.send(content=message_content, files=discord_files)
-                else:
-                    raise
-
-        # Delete status message
-        if not interaction_expired:
-            try:
-                await status_msg.delete()
-            except discord.HTTPException as e:
-                logger.warning(f"kandinsky5_batch: Could not delete status message: {e}")
+        await interaction.followup.send(message)
 
     except RuntimeError as re:
-        logger.exception(f"kandinsky5_batch: Runtime error - {re}")
-        await interaction.followup.send(
-            f"❌ Error generating videos: {re}"
-        )
+        logger.exception(f"k5-list: Runtime error - {re}")
+        await interaction.followup.send(f"❌ Error getting queue: {re}")
     except Exception as e:
-        logger.exception(f"kandinsky5_batch: Unexpected error during batch generation: {e}")
+        logger.exception(f"k5-list: Unexpected error: {e}")
+        await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}")
+
+
+@app_commands.command(
+    name="k5-cancel", description="Cancel a pending Kandinsky-5 task by task ID"
+)
+@app_commands.describe(task_id="The task ID to cancel (get from /k5-list)")
+async def k5_cancel_command(interaction: discord.Interaction, task_id: str) -> None:
+    """Cancel a pending Kandinsky-5 task."""
+    await interaction.response.defer(thinking=True)
+
+    try:
+        logger.info(f"k5-cancel: User {interaction.user} requested to cancel task {task_id}")
+
+        # Attempt to cancel the task
+        result = await services.cancel_kandinsky5_task(task_id)
+
+        message = result.get("message", "Task cancelled successfully")
+        status = result.get("status", "unknown")
+
         await interaction.followup.send(
-            f"❌ An unexpected error occurred: {e!s}"
+            f"✅ **Task cancelled:** `{task_id[:8]}`\n"
+            f"Status: {status}\n"
+            f"{message}"
         )
+
+    except RuntimeError as re:
+        logger.exception(f"k5-cancel: Runtime error - {re}")
+        await interaction.followup.send(f"❌ {re}")
+    except Exception as e:
+        logger.exception(f"k5-cancel: Unexpected error: {e}")
+        await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}")
