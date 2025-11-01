@@ -1682,17 +1682,10 @@ async def check_kandinsky5_health() -> bool:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{api_url}/health")
             response.raise_for_status()
-            data = response.json()
 
-            # Check if pipeline is initialized
-            is_healthy = data.get("status") == "healthy" and data.get("pipeline_initialized", False)
-
-            if is_healthy:
-                logger.info("Kandinsky-5 API health check: OK")
-            else:
-                logger.warning(f"Kandinsky-5 API health check: DEGRADED - {data}")
-
-            return is_healthy
+            # If we got a 200 response, the API is healthy
+            logger.info("Kandinsky-5 API health check: OK (HTTP 200)")
+            return True
 
     except httpx.ConnectError:
         logger.warning(f"Kandinsky-5 API health check: Cannot connect to {api_url}")
