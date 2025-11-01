@@ -1726,9 +1726,9 @@ async def generate_kandinsky5_video(
     Args:
         prompt: Text description of the video to generate
         negative_prompt: Optional negative guidance to avoid certain content
-        duration: Duration of the video in seconds (must be 5 or 10)
-        width: Video width in pixels (512 or 768, default: 512)
-        height: Video height in pixels (512 or 768, default: 512)
+        duration: Duration of the video in seconds (any positive integer)
+        width: Video width in pixels (must be a multiple of 16, default: 512)
+        height: Video height in pixels (must be a multiple of 16, default: 512)
         num_steps: Number of inference steps (default: 50)
         guidance_weight: Optional CFG weight (default: None, uses model default)
         scheduler_scale: Flow matching scheduler scale (default: 5.0)
@@ -1739,20 +1739,20 @@ async def generate_kandinsky5_video(
         Path to the saved video file
 
     Raises:
-        ValueError: If duration is not 5 or 10, or if width/height are invalid
+        ValueError: If duration is not positive, or if width/height are not multiples of 16
         RuntimeError: If API call fails or returns invalid data
     """
     api_url = "http://100.70.95.57:8888"
 
-    # Validate duration
-    if duration not in [5, 10]:
-        raise ValueError(f"Duration must be 5 or 10 seconds, got {duration}")
+    # Validate duration (any positive integer is allowed)
+    if duration <= 0:
+        raise ValueError(f"Duration must be a positive integer, got {duration}")
 
-    # Validate resolution (API supports 512 or 768 for each dimension)
-    if width not in [512, 768]:
-        raise ValueError(f"Width must be 512 or 768, got {width}")
-    if height not in [512, 768]:
-        raise ValueError(f"Height must be 512 or 768, got {height}")
+    # Validate resolution (width and height must be multiples of 16)
+    if width % 16 != 0:
+        raise ValueError(f"Width must be a multiple of 16, got {width}")
+    if height % 16 != 0:
+        raise ValueError(f"Height must be a multiple of 16, got {height}")
 
     logger.info(
         f"Generating Kandinsky-5 video: prompt='{prompt[:50]}...', "
@@ -1864,9 +1864,9 @@ async def generate_kandinsky5_batch(
     Args:
         prompts: List of text descriptions for videos to generate
         negative_prompt: Optional negative guidance applied to all videos
-        duration: Duration of each video in seconds (must be 5 or 10)
-        width: Video width in pixels (512 or 768, default: 512)
-        height: Video height in pixels (512 or 768, default: 512)
+        duration: Duration of each video in seconds (any positive integer)
+        width: Video width in pixels (must be a multiple of 16, default: 512)
+        height: Video height in pixels (must be a multiple of 16, default: 512)
         num_steps: Number of inference steps (default: 50)
         guidance_weight: Optional CFG weight (default: None, uses model default)
         scheduler_scale: Flow matching scheduler scale (default: 5.0)
@@ -1877,20 +1877,20 @@ async def generate_kandinsky5_batch(
         List of paths to the saved video files
 
     Raises:
-        ValueError: If duration is not 5 or 10, or if width/height are invalid
+        ValueError: If duration is not positive, or if width/height are not multiples of 16
         RuntimeError: If API call fails or returns invalid data
     """
     api_url = "http://100.70.95.57:8888"
 
-    # Validate duration
-    if duration not in [5, 10]:
-        raise ValueError(f"Duration must be 5 or 10 seconds, got {duration}")
+    # Validate duration (any positive integer is allowed)
+    if duration <= 0:
+        raise ValueError(f"Duration must be a positive integer, got {duration}")
 
-    # Validate resolution
-    if width not in [512, 768]:
-        raise ValueError(f"Width must be 512 or 768, got {width}")
-    if height not in [512, 768]:
-        raise ValueError(f"Height must be 512 or 768, got {height}")
+    # Validate resolution (width and height must be multiples of 16)
+    if width % 16 != 0:
+        raise ValueError(f"Width must be a multiple of 16, got {width}")
+    if height % 16 != 0:
+        raise ValueError(f"Height must be a multiple of 16, got {height}")
 
     logger.info(
         f"Generating Kandinsky-5 batch: {len(prompts)} videos, "
