@@ -1149,33 +1149,19 @@ async def gptimg_command(
 @app_commands.describe(
     prompt="Text description of the video to generate",
     negative_prompt="Describe what to avoid in the video (optional)",
-    duration="Video duration in seconds (5 or 10, default: 5)",
-    width="Video width in pixels (512 or 768, default: 512)",
-    height="Video height in pixels (512 or 768, default: 512)",
+    duration="Video duration in seconds (any positive number, default: 5)",
+    width="Video width in pixels (must be a multiple of 16, default: 512)",
+    height="Video height in pixels (must be a multiple of 16, default: 512)",
     num_steps="Number of inference steps (default: 50, higher = better quality but slower)",
     guidance_weight="CFG weight for prompt adherence (optional, uses model default if not set)",
     scheduler_scale="Flow matching scheduler scale (default: 5.0, advanced parameter)",
     seed="Random seed for reproducible results (optional)",
 )
-@app_commands.choices(
-    duration=[
-        app_commands.Choice(name="5 seconds (faster)", value=5),
-        app_commands.Choice(name="10 seconds", value=10),
-    ],
-    width=[
-        app_commands.Choice(name="512px", value=512),
-        app_commands.Choice(name="768px", value=768),
-    ],
-    height=[
-        app_commands.Choice(name="512px", value=512),
-        app_commands.Choice(name="768px", value=768),
-    ],
-)
 async def kandinsky5_command(
     interaction: discord.Interaction,
     prompt: str,
     negative_prompt: str | None = None,
-    duration: int = 5,
+    duration: app_commands.Range[int, 1, 1000] = 5,
     width: int = 512,
     height: int = 512,
     num_steps: app_commands.Range[int, 1, 100] = 50,
@@ -1185,6 +1171,37 @@ async def kandinsky5_command(
 ) -> None:
     """Generate a video using Kandinsky-5 text-to-video model."""
     await interaction.response.defer(thinking=True)
+
+    # Validate that width and height are multiples of 16
+    def round_to_multiple_of_16(value: int) -> int:
+        """Round a value to the nearest multiple of 16."""
+        return round(value / 16) * 16
+
+    width_valid = width % 16 == 0
+    height_valid = height % 16 == 0
+
+    if not width_valid or not height_valid:
+        # Calculate nearest valid resolutions
+        nearest_width = round_to_multiple_of_16(width)
+        nearest_height = round_to_multiple_of_16(height)
+
+        error_message = (
+            f"❌ **Invalid Resolution**\n\n"
+            f"Width and height must be multiples of 16.\n\n"
+            f"**Your input:** {width}x{height}\n"
+        )
+
+        if not width_valid and not height_valid:
+            error_message += f"**Recommended:** {nearest_width}x{nearest_height}\n"
+        elif not width_valid:
+            error_message += f"**Recommended:** {nearest_width}x{height}\n"
+        else:  # height not valid
+            error_message += f"**Recommended:** {width}x{nearest_height}\n"
+
+        error_message += "\nPlease try again with a valid resolution."
+
+        await interaction.followup.send(error_message, ephemeral=True)
+        return
 
     try:
         logger.info(
@@ -1368,9 +1385,9 @@ async def k5_list_command(interaction: discord.Interaction) -> None:
             return
 
         # Format the queue display
-        lines = [f"📋 **Kandinsky-5 Queue** ({total_queued} pending):\n"]
+        lines = [f"📋 **Kandinsky-5 Queue** ({total_queued} pending)\n"]
 
-        for task in tasks:
+        for i, task in enumerate(tasks):
             task_id = task.get("task_id", "unknown")
             status = task.get("status", "unknown")
             position = task.get("position", "?")
@@ -1379,22 +1396,37 @@ async def k5_list_command(interaction: discord.Interaction) -> None:
             task_type = task.get("task_type", "unknown")
             total_videos = task.get("total_videos", 1)
 
-            # Format task ID (show first 8 chars)
-            short_id = task_id[:8] if len(task_id) >= 8 else task_id
+            # Status emoji mapping
+            status_emoji = {
+                "pending": "⏳",
+                "processing": "🎨",
+                "completed": "✅",
+                "failed": "❌",
+                "cancelled": "🚫"
+            }.get(status.lower(), "📋")
 
-            # Format prompt (truncate to 40 chars)
+            # Format prompt (truncate to 50 chars for better readability)
             if prompt:
-                display_prompt = prompt[:40] + "..." if len(prompt) > 40 else prompt
+                display_prompt = prompt[:50] + "..." if len(prompt) > 50 else prompt
                 display_prompt = discord.utils.escape_markdown(display_prompt)
             else:
                 display_prompt = f"batch ({total_videos} videos)"
 
-            # Add asterisk for currently processing task
-            prefix = "*" if is_current else " "
+            # Mark currently processing task with arrow
+            current_marker = "**→** " if is_current else ""
 
-            # Format line
-            line = f"{prefix} [{position}] `{short_id}` | {status} | \"{display_prompt}\""
-            lines.append(line)
+            # Format task entry with better Discord markdown
+            task_line = f"{current_marker}**[{position}]** {status_emoji} **{status.title()}**"
+            id_line = f"`{task_id}`"
+            prompt_line = f"_{display_prompt}_"
+
+            lines.append(task_line)
+            lines.append(id_line)
+            lines.append(prompt_line)
+
+            # Add blank line between tasks (except after last one)
+            if i < len(tasks) - 1:
+                lines.append("")
 
         message = "\n".join(lines)
 
