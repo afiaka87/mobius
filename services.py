@@ -123,7 +123,8 @@ async def gpt_chat_completion(
 
 # --- OpenAI Speech Generation Service ---
 # Define a type alias for voice options to improve readability
-VoiceType = Literal["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
+# Updated October 2024 - deprecated: fable, onyx, nova (old shimmer)
+VoiceType = Literal["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"]
 
 
 async def generate_speech(text: str, voice: VoiceType, speed: float) -> Path:
