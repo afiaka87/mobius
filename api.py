@@ -42,25 +42,11 @@ app.add_middleware(
 
 # Type aliases matching commands.py
 AnthropicModel = Literal[
-    "claude-3-5-sonnet-20240620",
-    "claude-3-opus-20240229",
-    "claude-3-sonnet-20240229",
-    "claude-3-haiku-20240307",
-    "claude-2.1",
-    "claude-2.0",
-    "claude-instant-1.2",
+    "claude-sonnet-4-5",
+    "claude-haiku-4-5",
+    "claude-opus-4-1",
 ]
-GPTModel = Literal["gpt-4o", "gpt-4o-mini"]
-O1Model = Literal["o1-preview", "o1-mini", "o1"]
-FluxModel = Literal["fal-ai/flux/dev", "fal-ai/flux/schnell", "fal-ai/flux-pro/new"]
-FalImageSize = Literal[
-    "landscape_4_3",
-    "landscape_16_9",
-    "portrait_3_4",
-    "portrait_9_16",
-    "square",
-    "square_hd",
-]
+GPTModel = Literal["gpt-5", "gpt-5-mini", "gpt-5-nano"]
 GPTImageModel = Literal["gpt-image-1"]
 GPTImageSize = Literal["auto", "1024x1024", "1536x1024", "1024x1536"]
 GPTImageQuality = Literal["auto", "low", "medium", "high"]
@@ -70,7 +56,7 @@ GPTImageQuality = Literal["auto", "low", "medium", "high"]
 class AnthropicRequest(BaseModel):
     prompt: str = Field(..., description="The prompt for the AI model")
     max_tokens: int = Field(default=1024, ge=1, le=4096, description="Maximum tokens to generate")
-    model: AnthropicModel = Field(default="claude-3-5-sonnet-20240620", description="Anthropic model to use")
+    model: AnthropicModel = Field(default="claude-sonnet-4-5", description="Anthropic model to use")
 
 
 class AnthropicResponse(BaseModel):
@@ -82,7 +68,7 @@ class AnthropicResponse(BaseModel):
 class GPTRequest(BaseModel):
     prompt: str = Field(..., description="The prompt for the AI model")
     seed: int | None = Field(default=None, description="Seed for reproducible generation")
-    model_name: GPTModel = Field(default="gpt-4o-mini", description="GPT model to use")
+    model_name: GPTModel = Field(default="gpt-5-mini", description="GPT model to use")
 
 
 class GPTResponse(BaseModel):
@@ -90,21 +76,6 @@ class GPTResponse(BaseModel):
     model: str = Field(..., description="Model used for generation")
     prompt: str = Field(..., description="Original prompt")
     seed: int | None = Field(default=None, description="Seed used for generation")
-
-
-class FluxRequest(BaseModel):
-    prompt: str = Field(..., description="Image generation prompt")
-    model: FluxModel = Field(default="fal-ai/flux-pro/new", description="FLUX model to use")
-    image_size: FalImageSize = Field(default="square_hd", description="Image size/aspect ratio")
-    guidance_scale: float = Field(default=3.5, ge=0.0, le=10.0, description="Guidance scale for generation")
-
-
-class FluxResponse(BaseModel):
-    image_url: str = Field(..., description="URL of the generated image")
-    prompt: str = Field(..., description="Original prompt")
-    model: str = Field(..., description="Model used for generation")
-    image_size: str = Field(..., description="Image size used")
-    guidance_scale: float = Field(..., description="Guidance scale used")
 
 
 @app.get("/")
@@ -161,29 +132,6 @@ async def gpt_chat(request: GPTRequest) -> GPTResponse:
         raise HTTPException(
             status_code=500,
             detail="An error occurred while communicating with the OpenAI API",
-        ) from e
-
-
-@app.post("/flux", response_model=FluxResponse)
-async def flux_generate(request: FluxRequest) -> FluxResponse:
-    """Generate images with FLUX models."""
-    try:
-        image_url: str = await services.generate_flux_image(
-            request.prompt, request.model, request.image_size, request.guidance_scale
-        )
-
-        return FluxResponse(
-            image_url=image_url,
-            prompt=request.prompt,
-            model=request.model,
-            image_size=request.image_size,
-            guidance_scale=request.guidance_scale,
-        )
-    except Exception as e:
-        logger.exception(f"Error generating FLUX image for prompt: {request.prompt}")
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred while generating the image with FLUX",
         ) from e
 
 
@@ -264,19 +212,6 @@ async def remove_background(
 
 
 # Additional Request/Response models for remaining endpoints
-class O1Request(BaseModel):
-    prompt: str = Field(..., description="The prompt for the AI model")
-    model_name: O1Model = Field(default="o1", description="O1 model to use")
-    seed: int | None = Field(default=None, description="Seed for reproducible generation")
-
-
-class O1Response(BaseModel):
-    response: str = Field(..., description="The AI model's response")
-    model: str = Field(..., description="Model used for generation")
-    prompt: str = Field(..., description="Original prompt")
-    seed: int | None = Field(default=None, description="Seed used for generation")
-
-
 class YouTubeRequest(BaseModel):
     query: str = Field(..., description="YouTube search query")
 
@@ -305,13 +240,6 @@ class GoogleResponse(BaseModel):
 
 
 
-class T2VRequest(BaseModel):
-    text: str = Field(..., description="Text prompt for video generation")
-    length: int = Field(default=33, ge=1, le=100, description="Number of frames in the video")
-    steps: int = Field(default=30, ge=1, le=100, description="Number of diffusion steps")
-    seed: int = Field(default=0, description="Seed for generation (0 for random)")
-
-
 class GPTImageGenerateRequest(BaseModel):
     prompt: str = Field(..., description="Image generation prompt")
     model: GPTImageModel = Field(default="gpt-image-1", description="GPT Image model to use")
@@ -325,29 +253,6 @@ class TemperatureResponse(BaseModel):
     location: str = Field(default="Fayetteville, AR", description="Location")
     conditions: str | None = Field(default=None, description="Weather conditions")
     full_report: str = Field(..., description="Full weather report text")
-
-
-@app.post("/o1", response_model=O1Response)
-async def o1_chat(request: O1Request) -> O1Response:
-    """Generate a response using OpenAI's o1 series models."""
-    try:
-        messages: list[dict[str, Any]] = [{"role": "user", "content": [{"type": "text", "text": request.prompt}]}]
-        api_seed: int | None = int(request.seed) if request.seed is not None and request.seed != -1 else None
-
-        response_text: str = await services.gpt_chat_completion(messages, request.model_name, api_seed)
-
-        return O1Response(
-            response=response_text,
-            model=request.model_name,
-            prompt=request.prompt,
-            seed=api_seed,
-        )
-    except Exception as e:
-        logger.exception(f"Error with O1 API for prompt: {request.prompt}")
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred while communicating with the OpenAI O1 API",
-        ) from e
 
 
 @app.post("/youtube", response_model=YouTubeResponse)
@@ -464,33 +369,6 @@ async def google_search(request: GoogleRequest) -> GoogleResponse:
             status_code=500,
             detail="An error occurred during the Google search",
         ) from e
-
-
-
-
-@app.post("/t2v")
-async def text_to_video(request: T2VRequest) -> FileResponse:
-    """Generate a short video from text using WAN model."""
-    try:
-        video_path: Path = await services.t2v(
-            text=request.text,
-            length=request.length,
-            steps=request.steps,
-            seed=request.seed,
-        )
-
-        return FileResponse(
-            path=video_path,
-            filename=f"t2v_{request.seed}.mp4",
-            media_type="video/mp4",
-        )
-    except Exception as e:
-        logger.exception(f"Error generating t2v for prompt: {request.text}")
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred while generating the video",
-        ) from e
-
 
 @app.post("/gptimg/generate")
 async def gptimg_generate(request: GPTImageGenerateRequest) -> FileResponse:
