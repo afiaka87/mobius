@@ -512,8 +512,8 @@ def convert_audio_to_waveform_video(
         total_frames = int(fps * duration)
         frame_width, frame_height = 1280, 720
 
-        # Preprocessing: smooth the waveform slightly to reduce noise in visualization
-        smoothed_samples = gaussian_filter1d(samples, sigma=2)
+        # Preprocessing: smooth the waveform to reduce noise and improve visual appearance
+        smoothed_samples = gaussian_filter1d(samples, sigma=5)
 
         # Generate frames
         frames = []
@@ -564,30 +564,16 @@ def convert_audio_to_waveform_video(
 
                 points.append((x, y))
 
-            # Determine volume threshold based on the max possible value of samples
-            # (e.g., for 16-bit audio)
-            # This threshold helps in not drawing lines for very low noise.
-            # Assuming samples are in a typical range (e.g. -32768 to 32767 for 16-bit)
-            # A fixed threshold might be better than one relative to current segment's max.
-            # For now, let's use a simple heuristic: don't draw if amplitude is too low.
-            # This threshold is relative to the *normalized* height.
-            amplitude_threshold = 0.05
-
-            # Draw with anti-aliasing for smoother appearance
+            # Draw all points with anti-aliasing for smooth, continuous waveform
             for i in range(1, len(points)):
-                # Only draw if the amplitude is significant
-                if (
-                    abs(points[i][1] - frame_height / 2)
-                    > amplitude_threshold * frame_height
-                ):
-                    cv2.line(
-                        frame,
-                        points[i - 1],
-                        points[i],
-                        color=(0, 200, 255),  # Orange-yellow color
-                        thickness=2,
-                        lineType=cv2.LINE_AA,
-                    )
+                cv2.line(
+                    frame,
+                    points[i - 1],
+                    points[i],
+                    color=(0, 200, 255),  # Orange-yellow color
+                    thickness=2,
+                    lineType=cv2.LINE_AA,
+                )
 
             return frame
 
