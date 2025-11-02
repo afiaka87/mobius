@@ -25,7 +25,7 @@ dependencies = [
     "fastapi>=0.104.0",
     "moviepy==1.0.3", # Consider if specific version is strictly needed or if >= is okay
     "nest-asyncio>=1.6.0",
-    "openai>=1.59.7",
+    "openai>=1.60.0",
     "opencv-python>=4.10.0.84",
     "pydub>=0.25.1",
     "python-dotenv>=1.0.1",
