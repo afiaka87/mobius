@@ -539,33 +539,28 @@ def convert_audio_to_waveform_video(
             # Get the segment of samples for this frame
             current_samples = smoothed_samples[start_sample:end_sample]
 
-            # Normalize sample values to the frame height
-            # This scaling is important for visualization clarity
-            # (e.g. max value of a 16-bit sample if that's what pydub provides)
-            # For simplicity, normalizing based on current segment's min/max for now.
-            # A more stable visualization might normalize against global min/max
-            # or a fixed range.
-            y_min_val, y_max_val = current_samples.min(), current_samples.max()
-            y_range = y_max_val - y_min_val
+            # Normalize sample values for proper waveform centering
+            # Audio samples oscillate around zero, so we normalize based on max absolute value
+            max_abs_val = max(abs(current_samples.min()), abs(current_samples.max()))
 
-            if y_range < 1e-6:  # Avoid division by near-zero
-                y_range = 1.0
+            if max_abs_val < 1e-6:  # Avoid division by near-zero
+                max_abs_val = 1.0
 
             # Scale factor for drawing horizontal points
             x_scale = frame_width / (end_sample - start_sample)
-            # Note: vertical scaling is applied directly when calculating y-coordinates
 
             # Draw lines connecting points in the waveform
             points = []
             for i, sample_val in enumerate(current_samples):
                 x = int(i * x_scale)
 
-                # Normalize y to [0, 1] range
-                normalized_y = (sample_val - y_min_val) / y_range
+                # Normalize to [-1, 1] range (maintains oscillation around zero)
+                normalized_y = sample_val / max_abs_val
 
-                # Map to frame height with proper centering
+                # Map to frame height centered at frame_height/2
+                # Scale by 0.4 to use 80% of height (leaving 10% margin on each side)
                 # Invert y because image coordinates increase downward
-                y = int(frame_height * (0.5 - 0.4 * normalized_y))
+                y = int(frame_height / 2 - (normalized_y * frame_height * 0.4))
 
                 points.append((x, y))
 
