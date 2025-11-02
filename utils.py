@@ -510,7 +510,7 @@ def convert_audio_to_waveform_video(
         fps = 30
         duration = len(audio) / 1000  # Duration in seconds
         total_frames = int(fps * duration)
-        frame_width, frame_height = 1280, 720
+        frame_width, frame_height = 1280, 360
 
         # Preprocessing: smooth the waveform to reduce noise and improve visual appearance
         smoothed_samples = gaussian_filter1d(samples, sigma=5)
