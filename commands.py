@@ -94,19 +94,14 @@ def estimate_kandinsky5_eta(duration: int, num_steps: int) -> float:
 # Command descriptions for the /help command
 COMMANDS_INFO: Final[dict[str, str]] = {
     "help": "List all commands and their descriptions.",
-    "anthropic": "Chat completion with Anthropic LLM models.",
-    "gpt": "Chat with GPT-4o. Supports history. Outputs as a discord embed.",
-    "o1": "Generate a response using OpenAI's `o1` models.",
+    "claude": "Chat completion with Anthropic Claude models.",
+    "gpt": "Chat with GPT-5. Supports history. Outputs as a discord embed.",
     "say": "Generate speech from text using OpenAI's TTS API.",
     "youtube": "Search YouTube. Returns top result.",
     "temp": "Get the current temperature in Fayetteville, AR.",
     "google": "Uses Google Custom Search API to get results from the web.",
-    "flux": "Generate images with FLUX models (e.g., FLUX.1-schnell).",
-    "sd3_5_large": "Generate images with Stable Diffusion 3.5 Large models.",
-    "sdxl_pixel": "Generate pixel art images using SDXL with LoRA.",
     "rembg": "Remove image background using Rembg.",
     "gptimg": "Generate or edit images using OpenAI's GPT Image model.",
-    "t2v": "Generate text-to-video using WAN models.",
     "k5": "Generate a video using Kandinsky-5 text-to-video model.",
     "k5_list": "List the Kandinsky-5 task queue.",
     "k5_cancel": "Cancel a pending Kandinsky-5 task by task ID.",
@@ -117,32 +112,14 @@ ModelChoiceValue = str | float
 
 # Available model choices for various commands
 MODEL_CHOICES: Final[dict[str, list[ModelChoiceValue]]] = {
-    "anthropic": [
-        "claude-3-5-sonnet-20240620",  # Explicitly list claude-3.5-sonnet
-        "claude-3-opus-20240229",
-        "claude-3-sonnet-20240229",
-        "claude-3-haiku-20240307",
-        "claude-2.1",
-        "claude-2.0",
-        "claude-instant-1.2",
+    "claude": [
+        "claude-sonnet-4-5",  # Claude Sonnet 4.5 (auto-updated)
+        "claude-haiku-4-5",   # Claude Haiku 4.5 (auto-updated)
+        "claude-opus-4-1",    # Claude Opus 4.1 (auto-updated)
     ],
-    "gpt": ["gpt-4o", "gpt-4o-mini"],
-    "o1": ["o1-preview", "o1-mini", "o1"],  # Assuming 'o1' is a valid model identifier
+    "gpt": ["gpt-5", "gpt-5-mini", "gpt-5-nano"],
     "voices": ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
     "speeds": [0.5, 1.0, 1.25, 1.5, 2.0],
-    "flux_models": ["fal-ai/flux/dev", "fal-ai/flux/schnell", "fal-ai/flux-pro/new"],
-    "sd_models": [
-        "fal-ai/stable-diffusion-v35-large/turbo",
-        "fal-ai/stable-diffusion-v35-large",
-    ],
-    "image_sizes": [  # For fal-ai models
-        "landscape_4_3",
-        "landscape_16_9",
-        "portrait_3_4",
-        "portrait_9_16",
-        "square",
-        "square_hd",
-    ],
     "gptimg_models": ["gpt-image-1"],  # Simplified to just the GPT Image model
     "gptimg_sizes": [
         "auto",
@@ -155,30 +132,13 @@ MODEL_CHOICES: Final[dict[str, list[ModelChoiceValue]]] = {
 
 # Type aliases for specific string literals used in choices
 AnthropicModel = Literal[
-    "claude-3-5-sonnet-20240620",
-    "claude-3-opus-20240229",
-    "claude-3-sonnet-20240229",
-    "claude-3-haiku-20240307",
-    "claude-2.1",
-    "claude-2.0",
-    "claude-instant-1.2",
+    "claude-sonnet-4-5",
+    "claude-haiku-4-5",
+    "claude-opus-4-1",
 ]
-GPTModel = Literal["gpt-4o", "gpt-4o-mini"]
-O1Model = Literal["o1-preview", "o1-mini", "o1"]
+GPTModel = Literal["gpt-5", "gpt-5-mini", "gpt-5-nano"]
 TTSVoice = Literal["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
 TTSSpeed = Literal["0.5", "1.0", "1.25", "1.5", "2.0"]  # Stored as string from choice
-FluxModel = Literal["fal-ai/flux/dev", "fal-ai/flux/schnell", "fal-ai/flux-pro/new"]
-SDModel = Literal[
-    "fal-ai/stable-diffusion-v35-large/turbo", "fal-ai/stable-diffusion-v35-large"
-]
-FalImageSize = Literal[
-    "landscape_4_3",
-    "landscape_16_9",
-    "portrait_3_4",
-    "portrait_9_16",
-    "square",
-    "square_hd",
-]
 
 GPTImageModel = Literal["gpt-image-1"]
 GPTImageSize = Literal["auto", "1024x1024", "1536x1024", "1024x1536"]
@@ -190,8 +150,32 @@ GPTImageQuality = Literal["auto", "low", "medium", "high"]
 )
 async def help_command(interaction: discord.Interaction) -> None:
     """Displays a list of all available slash commands and their descriptions."""
-    help_lines: list[str] = [f"`/{cmd}`: {desc}" for cmd, desc in COMMANDS_INFO.items()]
-    help_message: str = "Here are the available commands:\n\n" + "\n".join(help_lines)
+    help_message = """**🤖 Mobius Bot Commands**
+
+**💬 AI Chat**
+`/claude` - Chat with Claude (Sonnet 4.5, Haiku 4.5, Opus 4.1)
+`/gpt` - Chat with GPT-5 (gpt-5, gpt-5-mini, gpt-5-nano)
+
+**🎨 Media Generation**
+`/say` - Generate speech from text (OpenAI TTS, 6 voices)
+`/gptimg` - Generate or edit images (GPT Image model, PNG output)
+`/k5` - Generate video (Kandinsky-5 text-to-video)
+
+**🔧 Media Processing**
+`/rembg` - Remove image background (fal.ai/rembg)
+
+**🔍 Search & Info**
+`/youtube` - Search YouTube (returns top result)
+`/google` - Search the web (Google Custom Search)
+`/temp` - Get current temperature in Fayetteville, AR
+
+**📋 Queue Management**
+`/k5-list` - List Kandinsky-5 task queue
+`/k5-cancel` - Cancel a pending Kandinsky-5 task
+
+**ℹ️ Help**
+`/help` - Show this help message"""
+
     await interaction.response.send_message(help_message, ephemeral=True)
 
 
@@ -251,193 +235,6 @@ async def say_command(
         )
 
 
-@app_commands.command(name="flux", description="Generate images with FLUX models.")
-@app_commands.choices(
-    model=[
-        app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["flux_models"]
-    ],
-    image_size=[
-        app_commands.Choice(name=str(s), value=s) for s in MODEL_CHOICES["image_sizes"]
-    ],
-)
-async def flux_command(
-    interaction: discord.Interaction,
-    prompt: str,
-    model: FluxModel = "fal-ai/flux-pro/new",
-    image_size: FalImageSize = "square_hd",
-    guidance_scale: app_commands.Range[float, 0.0, 10.0] = 3.5,
-) -> None:
-    """Generates an image using a FLUX model from fal.ai based on the prompt."""
-    await interaction.response.defer(ephemeral=False, thinking=True)
-    try:
-        image_url: str = await services.generate_flux_image(
-            prompt, model, image_size, guidance_scale
-        )
-        output: str = (
-            f"Prompt: **`{discord.utils.escape_markdown(prompt)}`**\n"
-            f"Model: **`{model}`**\n"
-            f"Image Size: **`{image_size}`**\n"
-            f"Guidance: **`{guidance_scale}`**\n\n{image_url}"
-        )
-        await interaction.followup.send(content=output)
-    except Exception:
-        logger.exception(f"Error generating FLUX image for prompt: {prompt}")
-        await interaction.followup.send(
-            "An error occurred while generating the image with FLUX.", ephemeral=True
-        )
-
-
-@app_commands.command(
-    name="sd3_5_large", description="Generate images with Stable Diffusion 3.5 Large."
-)
-@app_commands.choices(
-    model=[
-        app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["sd_models"]
-    ]
-)
-async def sd3_5_large_command(
-    interaction: discord.Interaction,
-    prompt: str,
-    model: SDModel = "fal-ai/stable-diffusion-v35-large",
-    guidance_scale: app_commands.Range[float, 0.0, 10.0] = 4.5,  # Default for SD3.5
-) -> None:
-    """Generates an image using Stable Diffusion 3.5 Large from fal.ai."""
-    await interaction.response.defer(ephemeral=False, thinking=True)
-    try:
-        # SD3.5 typically uses square_hd or similar high-res sizes
-        image_url: str = await services.generate_flux_image(
-            prompt, model, "square_hd", guidance_scale
-        )
-        output: str = (
-            f"Prompt: **`{discord.utils.escape_markdown(prompt)}`**\n"
-            f"Model: **`{model}`**\n"
-            f"Guidance: **`{guidance_scale}`**\n\n{image_url}"
-        )
-        await interaction.followup.send(content=output)
-    except Exception:
-        logger.exception(f"Error generating SD3.5 image for prompt: {prompt}")
-        await interaction.followup.send(
-            "An error occurred while generating the image with SD3.5.", ephemeral=True
-        )
-
-
-@app_commands.command(
-    name="sdxl_pixel",
-    description="Generate pixel art images using SDXL with LoRA support.",
-)
-@app_commands.choices(
-    scheduler=[
-        app_commands.Choice(name="Euler", value="euler"),
-        app_commands.Choice(name="DDIM", value="ddim"),
-    ]
-)
-async def sdxl_pixel_command(
-    interaction: discord.Interaction,
-    prompt: str,
-    negative_prompt: str | None = None,
-    width: app_commands.Range[int, 256, 2048] = 1024,
-    height: app_commands.Range[int, 256, 2048] = 1024,
-    num_inference_steps: app_commands.Range[int, 1, 150] = 30,
-    guidance_scale: app_commands.Range[float, 1.0, 20.0] = 7.5,
-    num_images: app_commands.Range[int, 1, 4] = 1,
-    seed: int | None = None,
-    lora_weight: app_commands.Range[float, 0.0, 2.0] = 1.0,
-    scheduler: str = "euler",
-) -> None:
-    """
-    Generates pixel art images using SDXL with LoRA.
-
-    This command generates high-quality pixel art using SDXL base model with a pixel art LoRA.
-    You can control the generation with various parameters including steps, guidance, and LoRA weight.
-    """
-    await interaction.response.defer(ephemeral=False, thinking=True)
-
-    # Get API URL from environment or use default
-    api_url: str = os.getenv("SDXL_PIXEL_API_URL", "http://localhost:8000")
-
-    try:
-        # Generate images using the service
-        image_paths: list[Path] = await services.generate_sdxl_pixelart_image(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            width=width,
-            height=height,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-            num_images_per_prompt=num_images,
-            seed=seed,
-            lora_weight=lora_weight,
-            scheduler=scheduler,
-            api_url=api_url,
-        )
-
-        # Prepare Discord files
-        discord_files: list[discord.File] = []
-        for img_path in image_paths:
-            if img_path.exists():
-                discord_files.append(discord.File(img_path, filename=img_path.name))
-
-        if not discord_files:
-            await interaction.followup.send(
-                "Failed to generate images. No valid image files were created.",
-                ephemeral=True,
-            )
-            return
-
-        # Format the response message
-        escaped_prompt = discord.utils.escape_markdown(prompt)
-        response_msg = (
-            f"**Pixel Art Generation Complete!**\n\n"
-            f"**Prompt:** {escaped_prompt}\n"
-        )
-
-        if negative_prompt:
-            escaped_neg = discord.utils.escape_markdown(negative_prompt)
-            response_msg += f"**Negative Prompt:** {escaped_neg}\n"
-
-        response_msg += (
-            f"**Settings:** {width}x{height} | Steps: {num_inference_steps} | "
-            f"Guidance: {guidance_scale} | LoRA: {lora_weight} | Scheduler: {scheduler}\n"
-        )
-
-        if seed is not None:
-            response_msg += f"**Seed:** {seed}\n"
-
-        response_msg += f"**Generated:** {len(discord_files)} image{'s' if len(discord_files) > 1 else ''}"
-
-        # Send the message with images
-        # Discord has a 10-file limit per message
-        if len(discord_files) <= 10:
-            await interaction.followup.send(content=response_msg, files=discord_files)
-        else:
-            # Send in batches if more than 10 images
-            await interaction.followup.send(content=response_msg, files=discord_files[:10])
-            for i in range(10, len(discord_files), 10):
-                batch = discord_files[i : i + 10]
-                await interaction.followup.send(files=batch)
-
-    except RuntimeError as e:
-        logger.exception(f"Runtime error generating SDXL pixel art for prompt: {prompt}")
-        error_msg = str(e)
-        if "Cannot connect" in error_msg:
-            await interaction.followup.send(
-                f"Cannot connect to SDXL pixel art API at {api_url}. "
-                "Please ensure the API server is running.",
-                ephemeral=True,
-            )
-        else:
-            await interaction.followup.send(
-                f"An error occurred while generating the image: {error_msg}",
-                ephemeral=True,
-            )
-    except Exception:
-        logger.exception(f"Unexpected error generating SDXL pixel art for prompt: {prompt}")
-        await interaction.followup.send(
-            "An unexpected error occurred while generating pixel art images.",
-            ephemeral=True,
-        )
-
-
 @app_commands.command(
     name="rembg",
     description="Remove background from an image using fal.ai/imageutils/rembg.",
@@ -477,11 +274,11 @@ async def rembg_command(
 
 
 @app_commands.command(
-    name="anthropic", description="Chat completion with Anthropic Claude models."
+    name="claude", description="Chat completion with Anthropic Claude models."
 )
 @app_commands.choices(
     model=[
-        app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["anthropic"]
+        app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["claude"]
     ]
 )
 async def anthropic_command(
@@ -489,7 +286,7 @@ async def anthropic_command(
     prompt: str,
     max_tokens: app_commands.Range[int, 1, 4096] = 1024,  # Adjusted max_tokens
     suppress_embeds: bool = True,
-    model: AnthropicModel = "claude-3-5-sonnet-20240620",
+    model: AnthropicModel = "claude-sonnet-4-5",
 ) -> None:
     """Gets a chat completion from an Anthropic Claude model."""
     await interaction.response.defer(ephemeral=False, thinking=True)
@@ -592,7 +389,7 @@ async def gpt_command(
     interaction: discord.Interaction,
     prompt: str,
     seed: int | None = None,  # OpenAI API seed is Optional
-    model_name: GPTModel = "gpt-4o-mini",
+    model_name: GPTModel = "gpt-5-mini",
 ) -> None:
     """Chats with an OpenAI GPT model and displays the response in an embed."""
     await interaction.response.defer(ephemeral=False, thinking=True)
@@ -630,56 +427,6 @@ async def gpt_command(
         logger.exception(f"Error with GPT command for prompt: {prompt}")
         await interaction.followup.send(
             "An error occurred while communicating with the OpenAI API.",
-            ephemeral=True,
-        )
-
-
-@app_commands.command(
-    name="o1",
-    description="Generate a response using OpenAI's o1 series models (stateless).",
-)
-@app_commands.choices(
-    model_name=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["o1"]]
-)
-async def o1_command(
-    interaction: discord.Interaction,
-    prompt: str,
-    model_name: O1Model = "o1",  # Default to 'o1' if it's a general model
-    seed: int | None = None,
-) -> None:
-    """Generates a response from an OpenAI o1 series model (stateless)."""
-    await interaction.response.defer(ephemeral=False, thinking=True)
-    try:
-        messages: list[dict[str, Any]] = [
-            {"role": "user", "content": [{"type": "text", "text": prompt}]}
-        ]
-        api_seed: int | None = int(seed) if seed is not None and seed != -1 else None
-        assistant_response: str = await services.gpt_chat_completion(
-            messages, model_name, api_seed
-        )
-
-        if len(assistant_response) >= 4000:  # Embed description limit
-            await _handle_long_response(
-                interaction, assistant_response, prompt, model_name, api_seed
-            )
-        else:
-            embed: discord.Embed = discord.Embed(
-                title=f"Response from {model_name}",
-                description=assistant_response,
-                color=discord.Color.purple(),
-            )
-            embed.add_field(
-                name="Prompt",
-                value=f"```{discord.utils.escape_markdown(prompt[:1000])}```",
-                inline=False,
-            )
-            if api_seed is not None:
-                embed.add_field(name="Seed", value=str(api_seed), inline=True)
-            await interaction.followup.send(embed=embed)
-    except Exception:
-        logger.exception(f"Error with o1 command for prompt: {prompt}")
-        await interaction.followup.send(
-            "An error occurred while communicating with the OpenAI o1 API.",
             ephemeral=True,
         )
 
@@ -770,40 +517,6 @@ async def google_command(interaction: discord.Interaction, query: str) -> None:
         logger.exception(f"Error during Google search for query: {query}")
         await interaction.followup.send(
             "An error occurred during the Google search.", ephemeral=True
-        )
-
-
-@app_commands.command(
-    name="t2v", description="Generate a short video from text using WAN model."
-)
-@app_commands.describe(
-    text="Text prompt for video generation.",
-    length="Number of frames in the video (e.g., 33).",
-    steps="Number of diffusion steps (e.g., 30).",
-    seed="Seed for generation (0 for random).",
-)
-async def t2v_command(
-    interaction: discord.Interaction,
-    text: str,
-    length: app_commands.Range[int, 1, 100] = 33,
-    steps: app_commands.Range[int, 1, 100] = 30,
-    seed: int = 0,  # 0 typically means random in many generation systems
-) -> None:
-    """Generates a text-to-video using a ComfyUI workflow with WAN models."""
-    await interaction.response.defer(ephemeral=False, thinking=True)
-    try:
-        video_path: Path = await services.t2v(
-            text=text, length=length, steps=steps, seed=seed
-        )
-        discord_file: discord.File = discord.File(video_path, filename=video_path.name)
-        await interaction.followup.send(
-            f'Video generated for prompt: "{discord.utils.escape_markdown(text[:50])}..."',
-            file=discord_file,
-        )
-    except Exception:
-        logger.exception(f"Error generating t2v for prompt: {text}")
-        await interaction.followup.send(
-            "An error occurred while generating the video.", ephemeral=True
         )
 
 
