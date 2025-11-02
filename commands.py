@@ -938,15 +938,14 @@ async def kandinsky5_command(
         estimated_eta_mins = estimate_kandinsky5_eta(duration, num_steps)
         eta_display = f"{estimated_eta_mins:.1f} minutes" if estimated_eta_mins >= 1 else f"{int(estimated_eta_mins * 60)} seconds"
 
-        # Send initial status message
+        # Edit original message with initial status
         seed_info = f" | **Seed:** {seed}" if seed is not None else ""
         guidance_info = f" | **CFG:** {guidance_weight}" if guidance_weight is not None else ""
-        status_msg = await interaction.followup.send(
-            f"🎬 Generating video with Kandinsky-5...\n"
+        await interaction.edit_original_response(
+            content=f"🎬 Generating video with Kandinsky-5...\n"
             f"**Prompt:** {discord.utils.escape_markdown(prompt[:100])}\n"
             f"**Resolution:** {width}x{height} | **Duration:** {duration}s | **Steps:** {num_steps}{guidance_info}{seed_info}\n"
-            f"⏳ Submitting task... (ETA: ~{eta_display})",
-            wait=True,
+            f"⏳ Submitting task... (ETA: ~{eta_display})"
         )
 
         # Create progress callback to update Discord message
@@ -1007,9 +1006,9 @@ async def kandinsky5_command(
                     logger.warning(f"kandinsky5: Could not send keepalive followup: {e}")
 
             try:
-                await status_msg.edit(content=updated_content)
+                await interaction.edit_original_response(content=updated_content)
             except discord.HTTPException as e:
-                logger.warning(f"kandinsky5: Could not update status message: {e}")
+                logger.warning(f"kandinsky5: Could not update original message: {e}")
 
         # Generate the video with progress updates
         video_path = await services.generate_kandinsky5_video(
@@ -1036,27 +1035,22 @@ async def kandinsky5_command(
             except discord.HTTPException as e:
                 logger.warning(f"kandinsky5: Could not delete final keepalive: {e}")
 
-        # Send the video
+        # Edit original message with the video
         discord_file = discord.File(video_path, filename=video_path.name)
         seed_info = f" | Seed: {seed}" if seed is not None else ""
         guidance_info = f" | CFG: {guidance_weight}" if guidance_weight is not None else ""
         neg_prompt_info = f"\n**Negative Prompt:** {discord.utils.escape_markdown(negative_prompt)}" if negative_prompt else ""
         final_message = (
-            f"✅ Video generation complete for {interaction.user.mention}! (Took {mins}m {secs}s)\n\n"
+            f"✅ Video generation complete! (Took {mins}m {secs}s)\n\n"
             f"**Prompt:** {discord.utils.escape_markdown(prompt)}{neg_prompt_info}\n"
             f"**Settings:** {width}x{height} | Duration: {duration}s | Steps: {num_steps}{guidance_info}{seed_info}\n"
             f"**Format:** MP4"
         )
 
         # For long-running tasks (>15 min), the interaction token may expire
-        # Try followup first, fall back to channel message
+        # Try editing original response first, fall back to channel message
         try:
-            await interaction.followup.send(content=final_message, file=discord_file)
-            # Delete status message if followup succeeded
-            try:
-                await status_msg.delete()
-            except discord.HTTPException as e:
-                logger.warning(f"kandinsky5: Could not delete status message: {e}")
+            await interaction.edit_original_response(content=final_message, attachments=[discord_file])
         except discord.HTTPException as e:
             if e.code == 50027:  # Invalid Webhook Token (interaction expired)
                 logger.info(f"kandinsky5: Interaction expired, sending to channel instead")
