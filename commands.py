@@ -118,7 +118,7 @@ MODEL_CHOICES: Final[dict[str, list[ModelChoiceValue]]] = {
         "claude-opus-4-1",    # Claude Opus 4.1 (auto-updated)
     ],
     "gpt": ["gpt-5", "gpt-5-mini", "gpt-5-nano"],
-    "voices": ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
+    "voices": ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"],
     "speeds": [0.5, 1.0, 1.25, 1.5, 2.0],
     "gptimg_models": ["gpt-image-1"],  # Simplified to just the GPT Image model
     "gptimg_sizes": [
@@ -137,7 +137,7 @@ AnthropicModel = Literal[
     "claude-opus-4-1",
 ]
 GPTModel = Literal["gpt-5", "gpt-5-mini", "gpt-5-nano"]
-TTSVoice = Literal["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
+TTSVoice = Literal["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"]
 TTSSpeed = Literal["0.5", "1.0", "1.25", "1.5", "2.0"]  # Stored as string from choice
 
 GPTImageModel = Literal["gpt-image-1"]
@@ -196,7 +196,7 @@ async def help_command(interaction: discord.Interaction) -> None:
 async def say_command(
     interaction: discord.Interaction,
     text: str,
-    voice: TTSVoice = "onyx",
+    voice: TTSVoice = "echo",
     speed: TTSSpeed = "1.0",
 ) -> None:
     """
