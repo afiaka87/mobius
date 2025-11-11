@@ -803,6 +803,8 @@ else:
     logger.warning("OBSCAST_API_URL not set. Media commands will not be available.")
 
 
+api_url = "http://100.105.155.18:8888"
+
 # --- Kandinsky-5 Video Generation Services ---
 async def check_kandinsky5_health() -> bool:
     """
@@ -811,7 +813,6 @@ async def check_kandinsky5_health() -> bool:
     Returns:
         True if the API is healthy, False otherwise
     """
-    api_url = "http://100.70.95.57:8888"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{api_url}/health")
@@ -869,7 +870,6 @@ async def generate_kandinsky5_video(
         ValueError: If duration is not positive, or if width/height are not multiples of 16
         RuntimeError: If API call fails or returns invalid data
     """
-    api_url = "http://100.70.95.57:8888"
 
     # Validate duration (any positive integer is allowed)
     if duration <= 0:
@@ -1007,8 +1007,6 @@ async def generate_kandinsky5_batch(
         ValueError: If duration is not positive, or if width/height are not multiples of 16
         RuntimeError: If API call fails or returns invalid data
     """
-    api_url = "http://100.70.95.57:8888"
-
     # Validate duration (any positive integer is allowed)
     if duration <= 0:
         raise ValueError(f"Duration must be a positive integer, got {duration}")
@@ -1140,7 +1138,6 @@ async def get_kandinsky5_queue() -> dict[str, Any]:
     Raises:
         RuntimeError: If API call fails
     """
-    api_url = "http://100.70.95.57:8888"
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
