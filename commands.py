@@ -91,6 +91,7 @@ def estimate_kandinsky5_eta(duration: int, num_steps: int) -> float:
     # Fallback
     return num_steps * 0.12
 
+
 # Command descriptions for the /help command
 COMMANDS_INFO: Final[dict[str, str]] = {
     "help": "List all commands and their descriptions.",
@@ -114,8 +115,8 @@ ModelChoiceValue = str | float
 MODEL_CHOICES: Final[dict[str, list[ModelChoiceValue]]] = {
     "claude": [
         "claude-sonnet-4-5",  # Claude Sonnet 4.5 (auto-updated)
-        "claude-haiku-4-5",   # Claude Haiku 4.5 (auto-updated)
-        "claude-opus-4-1",    # Claude Opus 4.1 (auto-updated)
+        "claude-haiku-4-5",  # Claude Haiku 4.5 (auto-updated)
+        "claude-opus-4-1",  # Claude Opus 4.1 (auto-updated)
     ],
     "gpt": ["gpt-5", "gpt-5-mini", "gpt-5-nano"],
     "voices": ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"],
@@ -145,9 +146,7 @@ GPTImageSize = Literal["auto", "1024x1024", "1536x1024", "1024x1536"]
 GPTImageQuality = Literal["auto", "low", "medium", "high"]
 
 
-@app_commands.command(
-    name="help", description="List all commands and their descriptions."
-)
+@app_commands.command(name="help", description="List all commands and their descriptions.")
 async def help_command(interaction: discord.Interaction) -> None:
     """Displays a list of all available slash commands and their descriptions."""
     help_message = """**🤖 Mobius Bot Commands**
@@ -184,14 +183,8 @@ async def help_command(interaction: discord.Interaction) -> None:
     description="Generate speech from text using OpenAI's TTS API. Max 4096 chars.",
 )
 @app_commands.choices(
-    voice=[
-        app_commands.Choice(name=str(voice_name), value=voice_name)
-        for voice_name in MODEL_CHOICES["voices"]
-    ],  # type: ignore # Mypy can't infer the type argument
-    speed=[
-        app_commands.Choice(name=f"{speed_val}x", value=str(speed_val))
-        for speed_val in MODEL_CHOICES["speeds"]
-    ],
+    voice=[app_commands.Choice(name=str(voice_name), value=voice_name) for voice_name in MODEL_CHOICES["voices"]],  # type: ignore # Mypy can't infer the type argument
+    speed=[app_commands.Choice(name=f"{speed_val}x", value=str(speed_val)) for speed_val in MODEL_CHOICES["speeds"]],
 )
 async def say_command(
     interaction: discord.Interaction,
@@ -203,50 +196,34 @@ async def say_command(
     Generates speech from the provided text using OpenAI's TTS API and sends it as an audio file.
     """
     if len(text) > 4096:
-        await interaction.response.send_message(
-            "Text cannot exceed 4096 characters.", ephemeral=True
-        )
+        await interaction.response.send_message("Text cannot exceed 4096 characters.", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=False, thinking=True)
     try:
         speech_speed: float = float(speed)
-        waveform_video_file_path: Path = await services.generate_speech(
-            text, voice, speech_speed
-        )
-        discord_file: discord.File = discord.File(
-            waveform_video_file_path, filename=waveform_video_file_path.name
-        )
+        waveform_video_file_path: Path = await services.generate_speech(text, voice, speech_speed)
+        discord_file: discord.File = discord.File(waveform_video_file_path, filename=waveform_video_file_path.name)
         await interaction.followup.send(
             content=f'Audio for "{text[:50]}..." using voice: {voice}, speed: {speed}x',
             file=discord_file,
         )
-    except (
-        ValueError
-    ) as e:  # Catches float conversion error or errors from services.generate_speech
+    except ValueError as e:  # Catches float conversion error or errors from services.generate_speech
         logger.exception(f"Error in 'say' command processing: {e}")
-        await interaction.followup.send(
-            f"An error occurred: {e}. Please check your input.", ephemeral=True
-        )
+        await interaction.followup.send(f"An error occurred: {e}. Please check your input.", ephemeral=True)
     except Exception:
         logger.exception(f"Unexpected error in 'say' command: {text}, {voice}, {speed}")
-        await interaction.followup.send(
-            "An unexpected error occurred while generating speech.", ephemeral=True
-        )
+        await interaction.followup.send("An unexpected error occurred while generating speech.", ephemeral=True)
 
 
 @app_commands.command(
     name="rembg",
     description="Remove background from an image using fal.ai/imageutils/rembg.",
 )
-async def rembg_command(
-    interaction: discord.Interaction, image: discord.Attachment
-) -> None:
+async def rembg_command(interaction: discord.Interaction, image: discord.Attachment) -> None:
     """Removes the background from the provided image."""
     if not image.content_type or not image.content_type.startswith("image/"):
-        await interaction.response.send_message(
-            "Please upload a valid image file (PNG, JPG, WEBP).", ephemeral=True
-        )
+        await interaction.response.send_message("Please upload a valid image file (PNG, JPG, WEBP).", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=False, thinking=True)
@@ -268,19 +245,11 @@ async def rembg_command(
             )
     except Exception:
         logger.exception(f"Error removing background for image: {image.url}")
-        await interaction.followup.send(
-            "An error occurred while removing the image background.", ephemeral=True
-        )
+        await interaction.followup.send("An error occurred while removing the image background.", ephemeral=True)
 
 
-@app_commands.command(
-    name="claude", description="Chat completion with Anthropic Claude models."
-)
-@app_commands.choices(
-    model=[
-        app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["claude"]
-    ]
-)
+@app_commands.command(name="claude", description="Chat completion with Anthropic Claude models.")
+@app_commands.choices(model=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["claude"]])
 async def anthropic_command(
     interaction: discord.Interaction,
     prompt: str,
@@ -291,9 +260,7 @@ async def anthropic_command(
     """Gets a chat completion from an Anthropic Claude model."""
     await interaction.response.defer(ephemeral=False, thinking=True)
     try:
-        message_text: str = await services.anthropic_chat_completion(
-            prompt=prompt, max_tokens=max_tokens, model=model
-        )
+        message_text: str = await services.anthropic_chat_completion(prompt=prompt, max_tokens=max_tokens, model=model)
 
         # Format with escaped prompt for safety
         formatted_response: str = (
@@ -304,9 +271,7 @@ async def anthropic_command(
 
         if len(formatted_response) >= 2000:
             temp_file_path: Path = utils.create_temp_file(formatted_response, ".md")
-            discord_file: discord.File = discord.File(
-                temp_file_path, filename="response.md"
-            )
+            discord_file: discord.File = discord.File(temp_file_path, filename="response.md")
             await interaction.followup.send(
                 content="Response too long, sending as a file.",
                 file=discord_file,
@@ -316,9 +281,7 @@ async def anthropic_command(
             except OSError as e:
                 logger.exception(f"Error deleting temporary file {temp_file_path}: {e}")
         else:
-            await interaction.followup.send(
-                content=formatted_response, suppress_embeds=suppress_embeds
-            )
+            await interaction.followup.send(content=formatted_response, suppress_embeds=suppress_embeds)
     except Exception:
         logger.exception(f"Error with Anthropic command for prompt: {prompt}")
         await interaction.followup.send(
@@ -347,9 +310,7 @@ async def _handle_long_response(
     temp_file_path: Path = Path()
     try:
         temp_file_path = utils.create_temp_file(content, ".md")
-        discord_file: discord.File = discord.File(
-            temp_file_path, filename=f"{model_name}_response.md"
-        )
+        discord_file: discord.File = discord.File(temp_file_path, filename=f"{model_name}_response.md")
 
         embed: discord.Embed = discord.Embed(
             title=f"Response from {model_name}",
@@ -367,9 +328,7 @@ async def _handle_long_response(
         await interaction.followup.send(embed=embed, file=discord_file)
     except Exception:
         logger.exception("Failed to handle long response and send as file.")
-        await interaction.followup.send(
-            "Error sending long response as a file.", ephemeral=True
-        )
+        await interaction.followup.send("Error sending long response as a file.", ephemeral=True)
     finally:
         if temp_file_path:
             try:
@@ -382,9 +341,7 @@ async def _handle_long_response(
     name="gpt",
     description="Chat with OpenAI's GPT models. Supports history. Outputs as embed.",
 )
-@app_commands.choices(
-    model_name=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["gpt"]]
-)
+@app_commands.choices(model_name=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["gpt"]])
 async def gpt_command(
     interaction: discord.Interaction,
     prompt: str,
@@ -401,14 +358,10 @@ async def gpt_command(
         # Ensure seed is passed as int if provided, or None
         api_seed: int | None = int(seed) if seed is not None and seed != -1 else None
 
-        assistant_response: str = await services.gpt_chat_completion(
-            history, model_name, api_seed
-        )
+        assistant_response: str = await services.gpt_chat_completion(history, model_name, api_seed)
 
         if len(assistant_response) >= 4000:  # Embed description limit is 4096
-            await _handle_long_response(
-                interaction, assistant_response, prompt, model_name, api_seed
-            )
+            await _handle_long_response(interaction, assistant_response, prompt, model_name, api_seed)
         else:
             embed: discord.Embed = discord.Embed(
                 title=f"Response from {model_name}",
@@ -431,9 +384,7 @@ async def gpt_command(
         )
 
 
-@app_commands.command(
-    name="youtube", description="Search YouTube and return the top video result."
-)
+@app_commands.command(name="youtube", description="Search YouTube and return the top video result.")
 async def youtube_command(interaction: discord.Interaction, query: str) -> None:
     """Searches YouTube for the given query and returns the top video result."""
     await interaction.response.defer(ephemeral=False, thinking=True)
@@ -447,13 +398,9 @@ async def youtube_command(interaction: discord.Interaction, query: str) -> None:
         return
 
     try:
-        result: dict[str, Any] = await services.get_top_youtube_result(
-            query, youtube_api_key
-        )
+        result: dict[str, Any] = await services.get_top_youtube_result(query, youtube_api_key)
         if "error" in result:
-            await interaction.followup.send(
-                f"YouTube search error: {result['error']}", ephemeral=True
-            )
+            await interaction.followup.send(f"YouTube search error: {result['error']}", ephemeral=True)
         elif "videoId" in result:
             video_url: str = f"https://www.youtube.com/watch?v={result['videoId']}"
             await interaction.followup.send(
@@ -466,14 +413,10 @@ async def youtube_command(interaction: discord.Interaction, query: str) -> None:
             )
     except Exception:
         logger.exception(f"Error during YouTube search for query: {query}")
-        await interaction.followup.send(
-            "An error occurred during the YouTube search.", ephemeral=True
-        )
+        await interaction.followup.send("An error occurred during the YouTube search.", ephemeral=True)
 
 
-@app_commands.command(
-    name="temp", description="Get the current temperature in Fayetteville, AR."
-)
+@app_commands.command(name="temp", description="Get the current temperature in Fayetteville, AR.")
 async def temp_command(interaction: discord.Interaction) -> None:
     """Fetches and displays the current temperature for Fayetteville, AR."""
     await interaction.response.defer(ephemeral=False, thinking=True)
@@ -482,20 +425,14 @@ async def temp_command(interaction: discord.Interaction) -> None:
         await interaction.followup.send(temperature_info)
     except Exception:
         logger.exception("Error fetching temperature data.")
-        await interaction.followup.send(
-            "An error occurred while fetching temperature data.", ephemeral=True
-        )
+        await interaction.followup.send("An error occurred while fetching temperature data.", ephemeral=True)
 
 
-@app_commands.command(
-    name="google", description="Search the web using Google Custom Search API."
-)
+@app_commands.command(name="google", description="Search the web using Google Custom Search API.")
 async def google_command(interaction: discord.Interaction, query: str) -> None:
     """Performs a Google search using the Custom Search API and returns top results."""
     await interaction.response.defer(ephemeral=False, thinking=True)
-    if not os.getenv("GOOGLE_SEARCH_API_KEY") or not os.getenv(
-        "GOOGLE_SEARCH_ENGINE_ID"
-    ):
+    if not os.getenv("GOOGLE_SEARCH_API_KEY") or not os.getenv("GOOGLE_SEARCH_ENGINE_ID"):
         logger.error("Google Search API key or CSE ID not configured.")
         await interaction.followup.send(
             "Google Search is not configured. This command is unavailable.",
@@ -515,9 +452,7 @@ async def google_command(interaction: discord.Interaction, query: str) -> None:
             )
     except Exception:
         logger.exception(f"Error during Google search for query: {query}")
-        await interaction.followup.send(
-            "An error occurred during the Google search.", ephemeral=True
-        )
+        await interaction.followup.send("An error occurred during the Google search.", ephemeral=True)
 
 
 @app_commands.command(
@@ -525,17 +460,9 @@ async def google_command(interaction: discord.Interaction, query: str) -> None:
     description="Generate or edit images using OpenAI's GPT Image model (saves as PNG).",
 )
 @app_commands.choices(
-    model=[
-        app_commands.Choice(name=str(m), value=m)
-        for m in MODEL_CHOICES["gptimg_models"]
-    ],
-    size=[
-        app_commands.Choice(name=str(s), value=s) for s in MODEL_CHOICES["gptimg_sizes"]
-    ],
-    quality=[
-        app_commands.Choice(name=str(q), value=q)
-        for q in MODEL_CHOICES["gptimg_quality"]
-    ],
+    model=[app_commands.Choice(name=str(m), value=m) for m in MODEL_CHOICES["gptimg_models"]],
+    size=[app_commands.Choice(name=str(s), value=s) for s in MODEL_CHOICES["gptimg_sizes"]],
+    quality=[app_commands.Choice(name=str(q), value=q) for q in MODEL_CHOICES["gptimg_quality"]],
 )
 async def gptimg_command(
     interaction: discord.Interaction,
@@ -562,9 +489,7 @@ async def gptimg_command(
 
     # Collect all provided edit images
     edit_images: list[discord.Attachment] = [
-        img
-        for img in [edit_image1, edit_image2, edit_image3, edit_image4, edit_image5]
-        if img is not None
+        img for img in [edit_image1, edit_image2, edit_image3, edit_image4, edit_image5] if img is not None
     ]
 
     is_editing: bool = len(edit_images) > 0
@@ -584,8 +509,7 @@ async def gptimg_command(
         f"🖌️ {operation_type.capitalize()} your image with {model}...\n\n"
         f"⏳ This can take 30-90 seconds.\n\n"
         f"**Prompt:** {escaped_prompt}\n"
-        f"**Settings:** Size: {size} | Quality: {quality}"
-        + (f" | Images: {len(edit_images)}" if is_editing else "")
+        f"**Settings:** Size: {size} | Quality: {quality}" + (f" | Images: {len(edit_images)}" if is_editing else "")
     )
 
     # Check length and provide clear error if too long
@@ -615,10 +539,8 @@ async def gptimg_command(
         if is_editing:
             # Validate and save all edit images
             for i, edit_img in enumerate(edit_images):
-                if not edit_img.content_type or not edit_img.content_type.startswith(
-                    "image/"
-                ):
-                    raise ValueError(f"edit_image{i+1} is not a valid image type.")
+                if not edit_img.content_type or not edit_img.content_type.startswith("image/"):
+                    raise ValueError(f"edit_image{i + 1} is not a valid image type.")
 
                 with tempfile.NamedTemporaryFile(
                     suffix=Path(edit_img.filename).suffix or ".png", delete=False
@@ -628,10 +550,7 @@ async def gptimg_command(
 
             # Validate and save mask_image if provided
             if mask_image:
-                if (
-                    not mask_image.content_type
-                    or not mask_image.content_type.startswith("image/")
-                ):
+                if not mask_image.content_type or not mask_image.content_type.startswith("image/"):
                     raise ValueError("mask_image is not a valid image type.")
 
                 with tempfile.NamedTemporaryFile(
@@ -647,31 +566,21 @@ async def gptimg_command(
         async def update_progress_periodically() -> None:
             nonlocal initial_message
             update_count: int = 0
-            max_updates: int = (
-                max_generation_time_seconds // progress_update_interval_seconds + 5
-            )
+            max_updates: int = max_generation_time_seconds // progress_update_interval_seconds + 5
 
             while update_count < max_updates and not operation_complete_event.is_set():
                 elapsed_time: int = int(time.time() - start_time)
                 minutes, seconds = divmod(elapsed_time, 60)
 
                 if elapsed_time > max_generation_time_seconds:
-                    logger.warning(
-                        f"gptimg: Generation timeout suspected after {elapsed_time}s."
-                    )
+                    logger.warning(f"gptimg: Generation timeout suspected after {elapsed_time}s.")
                     break
 
-                progress_percentage: float = min(
-                    100.0, (elapsed_time / estimated_completion_time_seconds) * 100
-                )
+                progress_percentage: float = min(100.0, (elapsed_time / estimated_completion_time_seconds) * 100)
                 segments: int = 10
                 filled_segments: int = int((progress_percentage / 100) * segments)
-                progress_bar: str = "⬛" * filled_segments + "⬜" * (
-                    segments - filled_segments
-                )
-                est_remaining: int = max(
-                    0, estimated_completion_time_seconds - elapsed_time
-                )
+                progress_bar: str = "⬛" * filled_segments + "⬜" * (segments - filled_segments)
+                est_remaining: int = max(0, estimated_completion_time_seconds - elapsed_time)
                 est_min, est_sec = divmod(est_remaining, 60)
 
                 updated_content: str = (
@@ -688,15 +597,11 @@ async def gptimg_command(
                         await initial_message.edit(content=updated_content)
                     update_count += 1
                 except discord.NotFound:
-                    logger.warning(
-                        "gptimg: Progress message not found, likely deleted by user."
-                    )
+                    logger.warning("gptimg: Progress message not found, likely deleted by user.")
                     initial_message = None
                     break
                 except discord.HTTPException as e_http:
-                    logger.exception(
-                        f"gptimg: Error updating progress message: {e_http}"
-                    )
+                    logger.exception(f"gptimg: Error updating progress message: {e_http}")
 
                 try:
                     await asyncio.wait_for(
@@ -709,9 +614,7 @@ async def gptimg_command(
                     logger.exception(f"gptimg: Error in update_progress wait: {e_wait}")
                     break
 
-            logger.info(
-                f"gptimg: Progress update loop finished. Updates: {update_count}"
-            )
+            logger.info(f"gptimg: Progress update loop finished. Updates: {update_count}")
             return None
 
         update_task = asyncio.create_task(update_progress_periodically())
@@ -738,57 +641,37 @@ async def gptimg_command(
             )
 
         try:
-            generated_image_path = await asyncio.wait_for(
-                generation_task, timeout=max_generation_time_seconds
-            )
+            generated_image_path = await asyncio.wait_for(generation_task, timeout=max_generation_time_seconds)
         except TimeoutError:
-            logger.exception(
-                f"gptimg: Image {operation_type} timed out after {max_generation_time_seconds}s."
-            )
+            logger.exception(f"gptimg: Image {operation_type} timed out after {max_generation_time_seconds}s.")
             if generation_task and not generation_task.done():
                 generation_task.cancel()
                 try:
                     await generation_task
                 except asyncio.CancelledError:
-                    logger.info(
-                        "gptimg: Generation task successfully cancelled on timeout."
-                    )
+                    logger.info("gptimg: Generation task successfully cancelled on timeout.")
                 except Exception as e_cancel:
-                    logger.exception(
-                        f"gptimg: Error during generation task cancellation: {e_cancel}"
-                    )
-            raise RuntimeError(
-                f"Image {operation_type} timed out. The API may be experiencing delays."
-            )
+                    logger.exception(f"gptimg: Error during generation task cancellation: {e_cancel}")
+            raise RuntimeError(f"Image {operation_type} timed out. The API may be experiencing delays.")
         finally:
             operation_complete_event.set()
             if update_task and not update_task.done():
                 try:
-                    await asyncio.wait_for(
-                        update_task, timeout=progress_update_interval_seconds + 1
-                    )
+                    await asyncio.wait_for(update_task, timeout=progress_update_interval_seconds + 1)
                 except TimeoutError:
-                    logger.warning(
-                        "gptimg: Update task did not finish cleanly after generation."
-                    )
+                    logger.warning("gptimg: Update task did not finish cleanly after generation.")
                     if not update_task.done():
                         update_task.cancel()
                 except Exception as e_await_update:
-                    logger.exception(
-                        f"gptimg: Error awaiting update task: {e_await_update}"
-                    )
+                    logger.exception(f"gptimg: Error awaiting update task: {e_await_update}")
 
         total_time_seconds: float = time.time() - start_time
         mins, secs = divmod(int(total_time_seconds), 60)
 
         if not generated_image_path or not generated_image_path.exists():
-            raise RuntimeError(
-                "Image generation service did not return a valid image file."
-            )
+            raise RuntimeError("Image generation service did not return a valid image file.")
 
-        final_discord_file: discord.File = discord.File(
-            generated_image_path, filename=generated_image_path.name
-        )
+        final_discord_file: discord.File = discord.File(generated_image_path, filename=generated_image_path.name)
         final_message_content: str = (
             f"✅ Image {operation_type} complete! (Took {mins}m {secs}s)\n\n"
             f"**Prompt:** {discord.utils.escape_markdown(prompt)}\n"
@@ -798,9 +681,7 @@ async def gptimg_command(
             + "\n**Format:** PNG (supports transparency)"
         )
 
-        await interaction.followup.send(
-            content=final_message_content, file=final_discord_file
-        )
+        await interaction.followup.send(content=final_message_content, file=final_discord_file)
 
         if initial_message:
             try:
@@ -815,12 +696,8 @@ async def gptimg_command(
         logger.exception(f"gptimg: Runtime error - {re}")
         await interaction.followup.send(f"❌ Runtime error: {re}", ephemeral=True)
     except Exception as e:
-        logger.exception(
-            f"gptimg: Unexpected error during {operation_type} for prompt: {prompt}"
-        )
-        await interaction.followup.send(
-            f"❌ An unexpected error occurred: {e!s}", ephemeral=True
-        )
+        logger.exception(f"gptimg: Unexpected error during {operation_type} for prompt: {prompt}")
+        await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}", ephemeral=True)
     finally:
         # Clean up temporary files
         for p in temp_image_paths:
@@ -828,22 +705,16 @@ async def gptimg_command(
                 try:
                     p.unlink()
                 except OSError as e_unlink:
-                    logger.exception(
-                        f"gptimg: Error deleting temp image file {p}: {e_unlink}"
-                    )
+                    logger.exception(f"gptimg: Error deleting temp image file {p}: {e_unlink}")
         if temp_mask_path and temp_mask_path.exists():
             try:
                 temp_mask_path.unlink()
             except OSError as e_unlink:
-                logger.exception(
-                    f"gptimg: Error deleting temp mask file {temp_mask_path}: {e_unlink}"
-                )
+                logger.exception(f"gptimg: Error deleting temp mask file {temp_mask_path}: {e_unlink}")
 
         operation_complete_event.set()
         # Final cleanup for any remaining tasks
-        tasks_to_cancel = [
-            t for t in [update_task, generation_task] if t and not t.done()
-        ]
+        tasks_to_cancel = [t for t in [update_task, generation_task] if t and not t.done()]
         if tasks_to_cancel:
             for task in tasks_to_cancel:
                 task.cancel()
@@ -856,9 +727,7 @@ async def gptimg_command(
         return None
 
 
-@app_commands.command(
-    name="k5", description="Generate a video using Kandinsky-5 text-to-video model"
-)
+@app_commands.command(name="k5", description="Generate a video using Kandinsky-5 text-to-video model")
 @app_commands.describe(
     prompt="Text description of the video to generate",
     negative_prompt="Describe what to avoid in the video (optional)",
@@ -874,10 +743,10 @@ async def kandinsky5_command(
     interaction: discord.Interaction,
     prompt: str,
     negative_prompt: str | None = None,
-    duration: app_commands.Range[int, 1, 1000] = 5,
+    duration: app_commands.Range[int, 1, 1000] = 3,
     width: int = 512,
     height: int = 512,
-    num_steps: app_commands.Range[int, 1, 100] = 50,
+    num_steps: app_commands.Range[int, 1, 100] = 20,
     guidance_weight: app_commands.Range[float, 0.0, 100.0] | None = None,
     scheduler_scale: app_commands.Range[float, 0.0, 100.0] = 5.0,
     seed: int | None = None,
@@ -925,9 +794,7 @@ async def kandinsky5_command(
         # Check API health first
         is_healthy = await services.check_kandinsky5_health()
         if not is_healthy:
-            await interaction.followup.send(
-                "⚠️ The Kandinsky-5 API is currently down. Sorry! Please try again later."
-            )
+            await interaction.followup.send("⚠️ The Kandinsky-5 API is currently down. Sorry! Please try again later.")
             return
 
         start_time = time.time()
@@ -936,7 +803,11 @@ async def kandinsky5_command(
 
         # Calculate estimated ETA
         estimated_eta_mins = estimate_kandinsky5_eta(duration, num_steps)
-        eta_display = f"{estimated_eta_mins:.1f} minutes" if estimated_eta_mins >= 1 else f"{int(estimated_eta_mins * 60)} seconds"
+        eta_display = (
+            f"{estimated_eta_mins:.1f} minutes"
+            if estimated_eta_mins >= 1
+            else f"{int(estimated_eta_mins * 60)} seconds"
+        )
 
         # Edit original message with initial status
         seed_info = f" | **Seed:** {seed}" if seed is not None else ""
@@ -998,7 +869,7 @@ async def kandinsky5_command(
                     last_keepalive_msg = await interaction.followup.send(
                         f"⏳ Still working on your video... (Elapsed: {elapsed_str} / ETA: ~{eta_display})",
                         ephemeral=True,
-                        wait=True
+                        wait=True,
                     )
                     last_followup_time = time.time()
                     logger.info(f"kandinsky5: Sent keepalive followup at {elapsed_str}")
@@ -1039,7 +910,9 @@ async def kandinsky5_command(
         discord_file = discord.File(video_path, filename=video_path.name)
         seed_info = f" | Seed: {seed}" if seed is not None else ""
         guidance_info = f" | CFG: {guidance_weight}" if guidance_weight is not None else ""
-        neg_prompt_info = f"\n**Negative Prompt:** {discord.utils.escape_markdown(negative_prompt)}" if negative_prompt else ""
+        neg_prompt_info = (
+            f"\n**Negative Prompt:** {discord.utils.escape_markdown(negative_prompt)}" if negative_prompt else ""
+        )
         final_message = (
             f"✅ Video generation complete! (Took {mins}m {secs}s)\n\n"
             f"**Prompt:** {discord.utils.escape_markdown(prompt)}{neg_prompt_info}\n"
@@ -1064,14 +937,10 @@ async def kandinsky5_command(
         await interaction.followup.send(f"❌ Error generating video: {re}")
     except Exception as e:
         logger.exception(f"kandinsky5: Unexpected error during video generation: {e}")
-        await interaction.followup.send(
-            f"❌ An unexpected error occurred: {e!s}"
-        )
+        await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}")
 
 
-@app_commands.command(
-    name="k5-list", description="List the Kandinsky-5 task queue"
-)
+@app_commands.command(name="k5-list", description="List the Kandinsky-5 task queue")
 async def k5_list_command(interaction: discord.Interaction) -> None:
     """List all tasks in the Kandinsky-5 queue."""
     await interaction.response.defer(thinking=True)
@@ -1109,7 +978,7 @@ async def k5_list_command(interaction: discord.Interaction) -> None:
                 "processing": "🎨",
                 "completed": "✅",
                 "failed": "❌",
-                "cancelled": "🚫"
+                "cancelled": "🚫",
             }.get(status.lower(), "📋")
 
             # Format prompt (truncate to 50 chars for better readability)
@@ -1147,9 +1016,7 @@ async def k5_list_command(interaction: discord.Interaction) -> None:
         await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}")
 
 
-@app_commands.command(
-    name="k5-cancel", description="Cancel a pending Kandinsky-5 task by task ID"
-)
+@app_commands.command(name="k5-cancel", description="Cancel a pending Kandinsky-5 task by task ID")
 @app_commands.describe(task_id="The task ID to cancel (get from /k5-list)")
 async def k5_cancel_command(interaction: discord.Interaction, task_id: str) -> None:
     """Cancel a pending Kandinsky-5 task."""
@@ -1164,11 +1031,7 @@ async def k5_cancel_command(interaction: discord.Interaction, task_id: str) -> N
         message = result.get("message", "Task cancelled successfully")
         status = result.get("status", "unknown")
 
-        await interaction.followup.send(
-            f"✅ **Task cancelled:** `{task_id[:8]}`\n"
-            f"Status: {status}\n"
-            f"{message}"
-        )
+        await interaction.followup.send(f"✅ **Task cancelled:** `{task_id[:8]}`\nStatus: {status}\n{message}")
 
     except RuntimeError as re:
         logger.exception(f"k5-cancel: Runtime error - {re}")
