@@ -81,17 +81,13 @@ async def gpt_chat_completion(
         api_args["seed"] = seed
 
     try:
-        logger.info(
-            f"Requesting OpenAI chat completion: model={model_name}, num_messages={len(messages)}, seed={seed}"
-        )
+        logger.info(f"Requesting OpenAI chat completion: model={model_name}, num_messages={len(messages)}, seed={seed}")
         completion = client.chat.completions.create(**api_args)
 
         if completion.choices and completion.choices[0].message:
             response_content: str | None = completion.choices[0].message.content
             if response_content is not None:
-                logger.info(
-                    f"OpenAI chat completion successful for model {model_name}."
-                )
+                logger.info(f"OpenAI chat completion successful for model {model_name}.")
                 return response_content
             else:
                 logger.error("OpenAI API response content is None.")
@@ -110,14 +106,10 @@ async def gpt_chat_completion(
         logger.exception(f"OpenAI API authentication error: {e}")
         raise
     except openai.APIStatusError as e:
-        logger.exception(
-            f"OpenAI API status error (code {e.status_code}): {e.response}"
-        )
+        logger.exception(f"OpenAI API status error (code {e.status_code}): {e.response}")
         raise
     except Exception as e:
-        logger.exception(
-            f"An unexpected error occurred during OpenAI chat completion: {e}"
-        )
+        logger.exception(f"An unexpected error occurred during OpenAI chat completion: {e}")
         raise
 
 
@@ -177,14 +169,10 @@ async def generate_speech(text: str, voice: VoiceType, speed: float) -> Path:
         logger.exception(f"OpenAI TTS API error for text '{text[:50]}...': {e}")
         raise
 
-    logger.info(
-        f"Converting speech audio at {speech_file_path} to video at {video_file_path}"
-    )
+    logger.info(f"Converting speech audio at {speech_file_path} to video at {video_file_path}")
     # The convert_audio_to_waveform_video function is from utils.py
     # and is assumed to handle its own errors or let them propagate.
-    convert_audio_to_waveform_video(
-        audio_file=str(speech_file_path), video_file=str(video_file_path)
-    )
+    convert_audio_to_waveform_video(audio_file=str(speech_file_path), video_file=str(video_file_path))
     logger.info(f"Waveform video saved to: {video_file_path}")
     return video_file_path
 
@@ -242,9 +230,7 @@ async def anthropic_chat_completion(
     # Client automatically picks up ANTHROPIC_API_KEY from env
     anthropic_client: AsyncAnthropic = AsyncAnthropic()
 
-    logger.info(
-        f"Requesting Anthropic completion: model={model}, prompt='{prompt[:50]}...'"
-    )
+    logger.info(f"Requesting Anthropic completion: model={model}, prompt='{prompt[:50]}...'")
     try:
         message: AnthropicMessage = await anthropic_client.messages.create(
             max_tokens=max_tokens,
@@ -255,9 +241,7 @@ async def anthropic_chat_completion(
         logger.info(f"Anthropic completion successful for model {model}.")
         return formatted_message
     except Exception as e:  # Catch generic Anthropic API errors
-        logger.exception(
-            f"Anthropic API error for model {model}, prompt '{prompt[:50]}...': {e}"
-        )
+        logger.exception(f"Anthropic API error for model {model}, prompt '{prompt[:50]}...': {e}")
         raise
 
 
@@ -304,9 +288,7 @@ async def google_search(query: str) -> str:
                 return "No results found."
 
             links: list[str] = [item["link"] for item in items if "link" in item]
-            logger.info(
-                f"Google search successful for '{query}', found {len(links)} links."
-            )
+            logger.info(f"Google search successful for '{query}', found {len(links)} links.")
             return "\n".join(links)
         except httpx.HTTPStatusError as e:
             logger.exception(
@@ -333,9 +315,7 @@ async def temp_callback() -> str:
         httpx.HTTPStatusError: For HTTP errors from the NWS API.
     """
     lat, lon = FAYETTEVILLE_COORDS
-    headers: dict[str, str] = {
-        "User-Agent": "MobiusDiscordBot/1.0 (github.com/afiaka87/mobius)"
-    }
+    headers: dict[str, str] = {"User-Agent": "MobiusDiscordBot/1.0 (github.com/afiaka87/mobius)"}
 
     logger.info(f"Fetching NWS gridpoint for coordinates: {lat}, {lon}")
     async with httpx.AsyncClient(headers=headers) as client:
@@ -345,14 +325,10 @@ async def temp_callback() -> str:
             response_points = await client.get(points_url)
             response_points.raise_for_status()
             points_data: dict[str, Any] = response_points.json()
-            forecast_hourly_url: str = points_data.get("properties", {}).get(
-                "forecastHourly"
-            )
+            forecast_hourly_url: str = points_data.get("properties", {}).get("forecastHourly")
 
             if not forecast_hourly_url:
-                logger.error(
-                    f"Could not retrieve hourly forecast URL from NWS API for {lat},{lon}"
-                )
+                logger.error(f"Could not retrieve hourly forecast URL from NWS API for {lat},{lon}")
                 raise ValueError("NWS API did not return a valid hourly forecast URL.")
 
             # 2. Get hourly forecast
@@ -361,13 +337,9 @@ async def temp_callback() -> str:
             response_forecast.raise_for_status()
             forecast_data: dict[str, Any] = response_forecast.json()
 
-            periods: list[dict[str, Any]] = forecast_data.get("properties", {}).get(
-                "periods", []
-            )
+            periods: list[dict[str, Any]] = forecast_data.get("properties", {}).get("periods", [])
             if not periods:
-                logger.warning(
-                    f"NWS API returned no forecast periods for {forecast_hourly_url}"
-                )
+                logger.warning(f"NWS API returned no forecast periods for {forecast_hourly_url}")
                 return "Could not retrieve current weather data."
 
             current_period: dict[str, Any] = periods[0]
@@ -379,16 +351,12 @@ async def temp_callback() -> str:
             # The API docs should be consulted for the exact structure of windChill.
             # Example: current_period.get("windChill", {}).get("value") if it's structured.
             # For now, assuming it's a simple value or None.
-            wind_chill_value: Any | None = current_period.get(
-                "windChill"
-            )  # This might be a dict or simple value
+            wind_chill_value: Any | None = current_period.get("windChill")  # This might be a dict or simple value
 
             if temperature is None or temp_unit is None:
                 return "Temperature data is currently unavailable."
 
-            result_str: str = (
-                f"Current temperature in Fayetteville, AR: {temperature}°{temp_unit}"
-            )
+            result_str: str = f"Current temperature in Fayetteville, AR: {temperature}°{temp_unit}"
             # Attempt to parse wind chill if it's a simple numeric value
             # This part is speculative based on typical API structures; adjust if NWS is different.
             if isinstance(wind_chill_value, int | float):
@@ -398,17 +366,13 @@ async def temp_callback() -> str:
                 and "value" in wind_chill_value
                 and isinstance(wind_chill_value["value"], int | float)
             ):
-                result_str += (
-                    f" with wind chill of {wind_chill_value['value']}°{temp_unit}"
-                )
+                result_str += f" with wind chill of {wind_chill_value['value']}°{temp_unit}"
 
             logger.info(f"Successfully fetched weather: {result_str}")
             return result_str
 
         except httpx.HTTPStatusError as e:
-            logger.exception(
-                f"NWS API HTTP error: {e.response.status_code} - {e.response.text}"
-            )
+            logger.exception(f"NWS API HTTP error: {e.response.status_code} - {e.response.text}")
             raise
         except Exception as e:
             logger.exception(f"Error fetching weather data from NWS: {e}")
@@ -456,16 +420,10 @@ async def get_top_youtube_result(search_query: str, api_key: str) -> dict[str, A
                 "channelTitle": top_result.get("snippet", {}).get("channelTitle"),
             }
             if not video_info["videoId"]:  # Essential field missing
-                logger.error(
-                    f"YouTube API response missing videoId for query '{search_query}': {top_result}"
-                )
-                return {
-                    "error": "Malformed response from YouTube API (missing videoId)"
-                }
+                logger.error(f"YouTube API response missing videoId for query '{search_query}': {top_result}")
+                return {"error": "Malformed response from YouTube API (missing videoId)"}
 
-            logger.info(
-                f"YouTube search successful for '{search_query}', found videoId: {video_info['videoId']}"
-            )
+            logger.info(f"YouTube search successful for '{search_query}', found videoId: {video_info['videoId']}")
             return video_info
 
         except httpx.HTTPStatusError as e:
@@ -474,9 +432,7 @@ async def get_top_youtube_result(search_query: str, api_key: str) -> dict[str, A
             )
             return {"error": f"YouTube API error: {e.response.status_code}"}
         except Exception as e:
-            logger.exception(
-                f"Error during YouTube search for query '{search_query}': {e}"
-            )
+            logger.exception(f"Error during YouTube search for query '{search_query}': {e}")
             return {"error": "An unexpected error occurred during YouTube search."}
 
 
@@ -554,9 +510,7 @@ async def generate_gpt_image(
         # Save the image as PNG to support transparency
         cache_dir: Path = Path(".cache/gptimg_generated")
         cache_dir.mkdir(parents=True, exist_ok=True)
-        safe_prompt_suffix: str = "".join(
-            c if c.isalnum() else "_" for c in prompt[:30]
-        )
+        safe_prompt_suffix: str = "".join(c if c.isalnum() else "_" for c in prompt[:30])
         filename: str = f"{model}_{safe_prompt_suffix}_{size}_{quality}.png"
         file_path: Path = cache_dir / filename
 
@@ -583,9 +537,7 @@ async def generate_gpt_image(
         raise
     except Exception as e:
         logger.exception(f"Unexpected error generating GPT image: {e}")
-        raise RuntimeError(
-            f"An unexpected error occurred during image generation: {e!s}"
-        )
+        raise RuntimeError(f"An unexpected error occurred during image generation: {e!s}")
 
 
 async def edit_gpt_image(
@@ -625,9 +577,7 @@ async def edit_gpt_image(
     if not images:
         raise ValueError("At least one image is required for editing.")
     if len(images) > 10:
-        logger.warning(
-            f"More than 10 images provided ({len(images)}), only first 10 will be used."
-        )
+        logger.warning(f"More than 10 images provided ({len(images)}), only first 10 will be used.")
         images = images[:10]
 
     client: OpenAIClient = OpenAIClient(api_key=openai_api_key)
@@ -683,9 +633,7 @@ async def edit_gpt_image(
             f"mask_present={bool(mask_file)}, prompt='{prompt[:50]}...'"
         )
 
-        result = await loop.run_in_executor(
-            None, lambda: client.images.edit(**api_params)
-        )
+        result = await loop.run_in_executor(None, lambda: client.images.edit(**api_params))
 
         if not result.data or not result.data[0].b64_json:
             logger.error("GPT Image editing returned no image data.")
@@ -697,9 +645,7 @@ async def edit_gpt_image(
         # Save the edited image as PNG to support transparency
         cache_dir: Path = Path(".cache/gptimg_edited")
         cache_dir.mkdir(parents=True, exist_ok=True)
-        safe_prompt_suffix: str = "".join(
-            c if c.isalnum() else "_" for c in prompt[:30]
-        )
+        safe_prompt_suffix: str = "".join(c if c.isalnum() else "_" for c in prompt[:30])
         filename: str = f"{model}_edit_{safe_prompt_suffix}_{size}.png"
         file_path: Path = cache_dir / filename
 
@@ -722,9 +668,7 @@ async def edit_gpt_image(
                 error_detail = err_dict["message"]
 
         if "mask" in error_detail.lower() and "alpha" in error_detail.lower():
-            raise ValueError(
-                f"Invalid mask: {error_detail}. Ensure it's a PNG with a proper alpha channel."
-            )
+            raise ValueError(f"Invalid mask: {error_detail}. Ensure it's a PNG with a proper alpha channel.")
         raise ValueError(f"Invalid request for GPT image editing: {error_detail}")
 
     except openai.APIError as e:
@@ -751,6 +695,7 @@ async def edit_gpt_image(
 # --- Celeste Diffusion API Service ---
 
 # --- Obscast Media API Service ---
+
 
 class ObscastAPIError(Exception):
     """Custom exception for Obscast API errors."""
@@ -803,8 +748,9 @@ else:
     logger.warning("OBSCAST_API_URL not set. Media commands will not be available.")
 
 
-api_url = "http://100.105.155.18:8888"
-SD_API_URL = "http://100.122.30.53:8889"
+K5_API_URL = "http://100.105.155.18:8888"
+SD_API_URL = "http://100.105.155.18:8889"
+
 
 # --- Kandinsky-5 Video Generation Services ---
 async def check_kandinsky5_health() -> bool:
@@ -816,7 +762,7 @@ async def check_kandinsky5_health() -> bool:
     """
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{api_url}/health")
+            response = await client.get(f"{K5_API_URL}/health")
             response.raise_for_status()
 
             # If we got a 200 response, the API is healthy
@@ -824,10 +770,10 @@ async def check_kandinsky5_health() -> bool:
             return True
 
     except httpx.ConnectError:
-        logger.warning(f"Kandinsky-5 API health check: Cannot connect to {api_url}")
+        logger.warning(f"Kandinsky-5 API health check: Cannot connect to {K5_API_URL}")
         return False
     except httpx.TimeoutException:
-        logger.warning(f"Kandinsky-5 API health check: Connection timeout to {api_url}")
+        logger.warning(f"Kandinsky-5 API health check: Connection timeout to {K5_API_URL}")
         return False
     except httpx.HTTPStatusError as e:
         logger.warning(f"Kandinsky-5 API health check: HTTP error {e.response.status_code}")
@@ -908,7 +854,7 @@ async def generate_kandinsky5_video(
     try:
         # Submit task to API
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(f"{api_url}/generate", json=payload)
+            response = await client.post(f"{K5_API_URL}/generate", json=payload)
             response.raise_for_status()
             submit_data = response.json()
 
@@ -922,7 +868,7 @@ async def generate_kandinsky5_video(
         # Poll for completion
         result_data = await simple_poll_task(
             task_id=task_id,
-            base_url=api_url,
+            base_url=K5_API_URL,
             status_endpoint=f"/task/{task_id}",
             poll_interval=15.0,
             max_duration=3600.0,
@@ -958,17 +904,11 @@ async def generate_kandinsky5_video(
         return file_path
 
     except httpx.ConnectError:
-        logger.exception(f"Cannot connect to Kandinsky-5 API at {api_url}")
-        raise RuntimeError(
-            f"Cannot connect to Kandinsky-5 API at {api_url}. Please check if it's running."
-        )
+        logger.exception(f"Cannot connect to Kandinsky-5 API at {K5_API_URL}")
+        raise RuntimeError(f"Cannot connect to Kandinsky-5 API at {K5_API_URL}. Please check if it's running.")
     except httpx.HTTPStatusError as e:
-        logger.exception(
-            f"Kandinsky-5 API HTTP error: {e.response.status_code} - {e.response.text}"
-        )
-        raise RuntimeError(
-            f"Kandinsky-5 API error: {e.response.status_code} - {e.response.text}"
-        )
+        logger.exception(f"Kandinsky-5 API HTTP error: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"Kandinsky-5 API error: {e.response.status_code} - {e.response.text}")
     except Exception as e:
         logger.exception(f"Error generating Kandinsky-5 video: {e}")
         raise RuntimeError(f"Failed to generate Kandinsky-5 video: {e!s}")
@@ -1044,7 +984,7 @@ async def generate_kandinsky5_batch(
     try:
         # Submit batch task to API
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(f"{api_url}/generate/batch", json=payload)
+            response = await client.post(f"{K5_API_URL}/generate/batch", json=payload)
             response.raise_for_status()
             submit_data = response.json()
 
@@ -1058,7 +998,7 @@ async def generate_kandinsky5_batch(
         # Poll for completion with longer timeout for batch operations
         result_data = await simple_poll_task(
             task_id=task_id,
-            base_url=api_url,
+            base_url=K5_API_URL,
             status_endpoint=f"/task/{task_id}",
             poll_interval=20.0,  # Slightly longer interval for batch
             max_duration=7200.0,  # 2 hours max for batch
@@ -1102,25 +1042,17 @@ async def generate_kandinsky5_batch(
                 f.write(video_bytes)
 
             video_paths.append(file_path)
-            logger.info(f"Kandinsky-5 batch video {i+1}/{len(result_data['videos'])} saved: {file_path}")
+            logger.info(f"Kandinsky-5 batch video {i + 1}/{len(result_data['videos'])} saved: {file_path}")
 
-        logger.info(
-            f"Kandinsky-5 batch generation complete. Generated {len(video_paths)} videos."
-        )
+        logger.info(f"Kandinsky-5 batch generation complete. Generated {len(video_paths)} videos.")
         return video_paths
 
     except httpx.ConnectError:
-        logger.exception(f"Cannot connect to Kandinsky-5 API at {api_url}")
-        raise RuntimeError(
-            f"Cannot connect to Kandinsky-5 API at {api_url}. Please check if it's running."
-        )
+        logger.exception(f"Cannot connect to Kandinsky-5 API at {K5_API_URL}")
+        raise RuntimeError(f"Cannot connect to Kandinsky-5 API at {K5_API_URL}. Please check if it's running.")
     except httpx.HTTPStatusError as e:
-        logger.exception(
-            f"Kandinsky-5 API HTTP error: {e.response.status_code} - {e.response.text}"
-        )
-        raise RuntimeError(
-            f"Kandinsky-5 API error: {e.response.status_code} - {e.response.text}"
-        )
+        logger.exception(f"Kandinsky-5 API HTTP error: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"Kandinsky-5 API error: {e.response.status_code} - {e.response.text}")
     except Exception as e:
         logger.exception(f"Error generating Kandinsky-5 batch videos: {e}")
         raise RuntimeError(f"Failed to generate Kandinsky-5 batch videos: {e!s}")
@@ -1142,7 +1074,7 @@ async def get_kandinsky5_queue() -> dict[str, Any]:
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{api_url}/tasks/queue")
+            response = await client.get(f"{K5_API_URL}/tasks/queue")
             response.raise_for_status()
             data = response.json()
 
@@ -1150,17 +1082,11 @@ async def get_kandinsky5_queue() -> dict[str, Any]:
             return data
 
     except httpx.ConnectError:
-        logger.exception(f"Cannot connect to Kandinsky-5 API at {api_url}")
-        raise RuntimeError(
-            f"Cannot connect to Kandinsky-5 API at {api_url}. Please check if it's running."
-        )
+        logger.exception(f"Cannot connect to Kandinsky-5 API at {K5_API_URL}")
+        raise RuntimeError(f"Cannot connect to Kandinsky-5 API at {K5_API_URL}. Please check if it's running.")
     except httpx.HTTPStatusError as e:
-        logger.exception(
-            f"Kandinsky-5 API HTTP error: {e.response.status_code} - {e.response.text}"
-        )
-        raise RuntimeError(
-            f"Kandinsky-5 API error: {e.response.status_code} - {e.response.text}"
-        )
+        logger.exception(f"Kandinsky-5 API HTTP error: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"Kandinsky-5 API error: {e.response.status_code} - {e.response.text}")
     except Exception as e:
         logger.exception(f"Error getting Kandinsky-5 queue: {e}")
         raise RuntimeError(f"Failed to get Kandinsky-5 queue: {e!s}")
@@ -1200,17 +1126,11 @@ async def cancel_kandinsky5_task(task_id: str) -> dict[str, Any]:
             logger.warning(f"Cannot cancel Kandinsky-5 task {task_id}: {error_detail}")
             raise RuntimeError(error_detail)
         else:
-            logger.exception(
-                f"Kandinsky-5 API HTTP error: {e.response.status_code} - {e.response.text}"
-            )
-            raise RuntimeError(
-                f"Kandinsky-5 API error: {e.response.status_code} - {e.response.text}"
-            )
+            logger.exception(f"Kandinsky-5 API HTTP error: {e.response.status_code} - {e.response.text}")
+            raise RuntimeError(f"Kandinsky-5 API error: {e.response.status_code} - {e.response.text}")
     except httpx.ConnectError:
         logger.exception(f"Cannot connect to Kandinsky-5 API at {api_url}")
-        raise RuntimeError(
-            f"Cannot connect to Kandinsky-5 API at {api_url}. Please check if it's running."
-        )
+        raise RuntimeError(f"Cannot connect to Kandinsky-5 API at {api_url}. Please check if it's running.")
     except Exception as e:
         logger.exception(f"Error cancelling Kandinsky-5 task {task_id}: {e}")
         raise RuntimeError(f"Failed to cancel Kandinsky-5 task: {e!s}")
@@ -1268,16 +1188,10 @@ async def get_sd_schedulers() -> list[dict[str, str]]:
 
     except httpx.ConnectError:
         logger.exception(f"Cannot connect to Stable Diffusion API at {SD_API_URL}")
-        raise RuntimeError(
-            f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running."
-        )
+        raise RuntimeError(f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running.")
     except httpx.HTTPStatusError as e:
-        logger.exception(
-            f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}"
-        )
-        raise RuntimeError(
-            f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}"
-        )
+        logger.exception(f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}")
     except Exception as e:
         logger.exception(f"Error getting SD schedulers: {e}")
         raise RuntimeError(f"Failed to get SD schedulers: {e!s}")
@@ -1305,16 +1219,10 @@ async def list_sd_experiments() -> list[str]:
 
     except httpx.ConnectError:
         logger.exception(f"Cannot connect to Stable Diffusion API at {SD_API_URL}")
-        raise RuntimeError(
-            f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running."
-        )
+        raise RuntimeError(f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running.")
     except httpx.HTTPStatusError as e:
-        logger.exception(
-            f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}"
-        )
-        raise RuntimeError(
-            f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}"
-        )
+        logger.exception(f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}")
     except Exception as e:
         logger.exception(f"Error listing SD experiments: {e}")
         raise RuntimeError(f"Failed to list SD experiments: {e!s}")
@@ -1337,6 +1245,7 @@ async def list_sd_checkpoints(experiment_run: str) -> list[str]:
         async with httpx.AsyncClient(timeout=10.0) as client:
             # URL encode the experiment_run path
             from urllib.parse import quote
+
             encoded_path = quote(experiment_run, safe="")
 
             response = await client.get(f"{SD_API_URL}/experiments/{encoded_path}/checkpoints")
@@ -1349,16 +1258,10 @@ async def list_sd_checkpoints(experiment_run: str) -> list[str]:
 
     except httpx.ConnectError:
         logger.exception(f"Cannot connect to Stable Diffusion API at {SD_API_URL}")
-        raise RuntimeError(
-            f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running."
-        )
+        raise RuntimeError(f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running.")
     except httpx.HTTPStatusError as e:
-        logger.exception(
-            f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}"
-        )
-        raise RuntimeError(
-            f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}"
-        )
+        logger.exception(f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}")
     except Exception as e:
         logger.exception(f"Error listing SD checkpoints for {experiment_run}: {e}")
         raise RuntimeError(f"Failed to list SD checkpoints: {e!s}")
@@ -1394,16 +1297,10 @@ async def load_sd_checkpoint(checkpoint_path: str | None) -> dict[str, Any]:
 
     except httpx.ConnectError:
         logger.exception(f"Cannot connect to Stable Diffusion API at {SD_API_URL}")
-        raise RuntimeError(
-            f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running."
-        )
+        raise RuntimeError(f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running.")
     except httpx.HTTPStatusError as e:
-        logger.exception(
-            f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}"
-        )
-        raise RuntimeError(
-            f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}"
-        )
+        logger.exception(f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}")
     except Exception as e:
         logger.exception(f"Error loading SD checkpoint: {e}")
         raise RuntimeError(f"Failed to load SD checkpoint: {e!s}")
@@ -1501,23 +1398,17 @@ async def generate_sd_images(
                 f.write(image_bytes)
 
             image_paths.append(file_path)
-            logger.info(f"SD image {i+1}/{len(result_data['images'])} saved: {file_path}")
+            logger.info(f"SD image {i + 1}/{len(result_data['images'])} saved: {file_path}")
 
         logger.info(f"SD generation complete. Generated {len(image_paths)} images.")
         return image_paths
 
     except httpx.ConnectError:
         logger.exception(f"Cannot connect to Stable Diffusion API at {SD_API_URL}")
-        raise RuntimeError(
-            f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running."
-        )
+        raise RuntimeError(f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running.")
     except httpx.HTTPStatusError as e:
-        logger.exception(
-            f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}"
-        )
-        raise RuntimeError(
-            f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}"
-        )
+        logger.exception(f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}")
     except Exception as e:
         logger.exception(f"Error generating SD images: {e}")
         raise RuntimeError(f"Failed to generate SD images: {e!s}")
