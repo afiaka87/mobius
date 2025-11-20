@@ -106,6 +106,9 @@ COMMANDS_INFO: Final[dict[str, str]] = {
     "k5": "Generate a video using Kandinsky-5 text-to-video model.",
     "k5_list": "List the Kandinsky-5 task queue.",
     "k5_cancel": "Cancel a pending Kandinsky-5 task by task ID.",
+    "sd": "Generate images using Stable Diffusion 1.5 model.",
+    "sd-load": "Load a Stable Diffusion checkpoint.",
+    "sd-list": "List available Stable Diffusion checkpoints.",
 }
 
 # Type alias for model choice values
@@ -129,6 +132,7 @@ MODEL_CHOICES: Final[dict[str, list[ModelChoiceValue]]] = {
         "1024x1536",  # GPT Image supported sizes
     ],
     "gptimg_quality": ["auto", "low", "medium", "high"],  # GPT Image quality options
+    "sd_schedulers": ["DDIM", "Euler", "Euler A", "Heun", "DPM++ 2M", "DPM++ 3M", "DPM++ SDE"],  # Stable Diffusion schedulers
 }
 
 # Type aliases for specific string literals used in choices
@@ -1039,3 +1043,242 @@ async def k5_cancel_command(interaction: discord.Interaction, task_id: str) -> N
     except Exception as e:
         logger.exception(f"k5-cancel: Unexpected error: {e}")
         await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}")
+
+
+# --- Stable Diffusion Commands ---
+
+# Create scheduler choices for the /sd command
+SD_SCHEDULER_CHOICES = [
+    app_commands.Choice(name="DDIM", value="DDIM"),
+    app_commands.Choice(name="Euler", value="Euler"),
+    app_commands.Choice(name="Euler A", value="Euler A"),
+    app_commands.Choice(name="Heun", value="Heun"),
+    app_commands.Choice(name="DPM++ 2M", value="DPM++ 2M"),
+    app_commands.Choice(name="DPM++ 3M", value="DPM++ 3M"),
+    app_commands.Choice(name="DPM++ SDE", value="DPM++ SDE"),
+]
+
+
+@app_commands.command(name="sd", description="Generate images using Stable Diffusion 1.5 model")
+@app_commands.describe(
+    prompt="Text description of the image to generate",
+    negative_prompt="Things to avoid in the image (optional)",
+    num_inference_steps="Number of denoising steps (1-100, default: 8)",
+    guidance_scale="CFG scale - higher = more prompt adherence (1.0-20.0, default: 7.5)",
+    width="Image width in pixels (must be multiple of 64, default: 512)",
+    height="Image height in pixels (must be multiple of 64, default: 512)",
+    num_images="Number of images to generate (1-4, default: 1)",
+    seed="Random seed for reproducibility (-1 for random, default: -1)",
+    lora_scale="LoRA intensity (0.0-2.0, default: 1.0)",
+    scheduler_name="Sampling method (default: DPM++ SDE)",
+)
+@app_commands.choices(scheduler_name=SD_SCHEDULER_CHOICES)
+async def sd_command(
+    interaction: discord.Interaction,
+    prompt: str,
+    negative_prompt: str = "",
+    num_inference_steps: app_commands.Range[int, 1, 100] = 8,
+    guidance_scale: app_commands.Range[float, 1.0, 20.0] = 7.5,
+    width: app_commands.Range[int, 64, 1024] = 512,
+    height: app_commands.Range[int, 64, 1024] = 512,
+    num_images: app_commands.Range[int, 1, 4] = 1,
+    seed: int = -1,
+    lora_scale: app_commands.Range[float, 0.0, 2.0] = 1.0,
+    scheduler_name: str = "DPM++ SDE",
+) -> None:
+    """Generate images using Stable Diffusion 1.5."""
+
+    # Validate resolution (must be multiples of 64)
+    if width % 64 != 0:
+        await interaction.response.send_message(
+            f"❌ **Error:** Width must be a multiple of 64. Got {width}.\n"
+            f"💡 **Suggestion:** Try {(width // 64) * 64} or {((width // 64) + 1) * 64}",
+            ephemeral=True,
+        )
+        return
+
+    if height % 64 != 0:
+        await interaction.response.send_message(
+            f"❌ **Error:** Height must be a multiple of 64. Got {height}.\n"
+            f"💡 **Suggestion:** Try {(height // 64) * 64} or {((height // 64) + 1) * 64}",
+            ephemeral=True,
+        )
+        return
+
+    # Log the request
+    logger.info(
+        f"sd: User {interaction.user} requested image generation: "
+        f"prompt='{prompt[:50]}...', resolution={width}x{height}, "
+        f"steps={num_inference_steps}, scheduler={scheduler_name}, num_images={num_images}"
+    )
+
+    # Defer the response (this will be quick, no need for thinking=True)
+    await interaction.response.defer()
+
+    try:
+        # Update status
+        await interaction.edit_original_response(
+            content=f"🎨 **Generating {num_images} image(s)...**\n"
+            f"**Prompt:** {prompt[:100]}{'...' if len(prompt) > 100 else ''}\n"
+            f"**Scheduler:** {scheduler_name} | **Steps:** {num_inference_steps} | **Size:** {width}x{height}"
+        )
+
+        # Generate images
+        start_time = time.time()
+        image_paths = await services.generate_sd_images(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            width=width,
+            height=height,
+            num_images=num_images,
+            seed=seed,
+            lora_scale=lora_scale,
+            scheduler_name=scheduler_name,
+        )
+        generation_time = time.time() - start_time
+
+        # Create Discord files from all generated images
+        discord_files = [discord.File(str(img_path)) for img_path in image_paths]
+
+        # Send the result with all images
+        result_message = (
+            f"✅ **Generated {len(image_paths)} image(s)** in {generation_time:.1f}s\n"
+            f"**Prompt:** {prompt}\n"
+            f"**Scheduler:** {scheduler_name} | **Steps:** {num_inference_steps} | "
+            f"**Size:** {width}x{height} | **Seed:** {seed}"
+        )
+
+        await interaction.edit_original_response(
+            content=result_message,
+            attachments=discord_files,
+        )
+
+    except ValueError as ve:
+        logger.exception(f"sd: Validation error - {ve}")
+        await interaction.edit_original_response(
+            content=f"❌ **Invalid parameters:** {ve}"
+        )
+    except RuntimeError as re:
+        logger.exception(f"sd: Runtime error - {re}")
+        await interaction.edit_original_response(
+            content=f"❌ **Error generating image:** {re}"
+        )
+    except Exception as e:
+        logger.exception(f"sd: Unexpected error: {e}")
+        await interaction.edit_original_response(
+            content=f"❌ **An unexpected error occurred:** {e!s}"
+        )
+
+
+@app_commands.command(name="sd-load", description="Load a Stable Diffusion checkpoint")
+@app_commands.describe(
+    checkpoint_path="Path to checkpoint (e.g., 'checkpoints/laion2b/resume/checkpoint-17500') or 'base' for base model"
+)
+async def sd_load_command(
+    interaction: discord.Interaction,
+    checkpoint_path: str,
+) -> None:
+    """Load a Stable Diffusion checkpoint."""
+    await interaction.response.defer(thinking=True)
+
+    try:
+        logger.info(f"sd-load: User {interaction.user} requested to load checkpoint: {checkpoint_path}")
+
+        # Convert "base" to None for the API
+        api_checkpoint_path = None if checkpoint_path.lower() == "base" else checkpoint_path
+
+        # Load the checkpoint
+        result = await services.load_sd_checkpoint(api_checkpoint_path)
+
+        checkpoint_name = result.get("checkpoint_name", "Unknown")
+        is_lora = result.get("is_lora", False)
+        status = result.get("status", "Loaded successfully")
+
+        checkpoint_type = "LoRA" if is_lora else "Full Model"
+
+        await interaction.followup.send(
+            f"✅ **Checkpoint loaded successfully**\n"
+            f"**Name:** {checkpoint_name}\n"
+            f"**Type:** {checkpoint_type}\n"
+            f"**Status:** {status}"
+        )
+
+    except RuntimeError as re:
+        logger.exception(f"sd-load: Runtime error - {re}")
+        await interaction.followup.send(f"❌ **Error loading checkpoint:** {re}")
+    except Exception as e:
+        logger.exception(f"sd-load: Unexpected error: {e}")
+        await interaction.followup.send(f"❌ **An unexpected error occurred:** {e!s}")
+
+
+@app_commands.command(name="sd-list", description="List available Stable Diffusion checkpoints")
+async def sd_list_command(interaction: discord.Interaction) -> None:
+    """List available Stable Diffusion checkpoints."""
+    await interaction.response.defer(thinking=True)
+
+    try:
+        logger.info(f"sd-list: User {interaction.user} requested checkpoint list")
+
+        # Get list of experiments
+        experiments = await services.list_sd_experiments()
+
+        if not experiments:
+            await interaction.followup.send("📦 No experiment runs found.")
+            return
+
+        # Build a formatted message with all experiments and their checkpoints
+        message_parts = ["📦 **Available Stable Diffusion Checkpoints**\n"]
+
+        for experiment_run in experiments:
+            try:
+                checkpoints = await services.list_sd_checkpoints(experiment_run)
+
+                message_parts.append(f"\n**{experiment_run}**")
+                if checkpoints:
+                    for checkpoint in checkpoints:
+                        full_path = f"checkpoints/{experiment_run}/{checkpoint}"
+                        message_parts.append(f"  • `{checkpoint}` → `{full_path}`")
+                else:
+                    message_parts.append("  _No checkpoints found_")
+            except Exception as e:
+                logger.warning(f"sd-list: Error listing checkpoints for {experiment_run}: {e}")
+                message_parts.append(f"  _Error: {e!s}_")
+
+        message_parts.append("\n💡 **Usage:** `/sd-load checkpoint_path:<full_path>`")
+        message_parts.append("💡 **Example:** `/sd-load checkpoint_path:checkpoints/laion2b/resume/checkpoint-17500`")
+
+        full_message = "\n".join(message_parts)
+
+        # Discord has a 2000 character limit, split if necessary
+        if len(full_message) <= 2000:
+            await interaction.followup.send(full_message)
+        else:
+            # Split into multiple messages
+            chunks = []
+            current_chunk = message_parts[0]  # Start with header
+
+            for part in message_parts[1:]:
+                if len(current_chunk) + len(part) + 1 <= 2000:
+                    current_chunk += "\n" + part
+                else:
+                    chunks.append(current_chunk)
+                    current_chunk = part
+
+            if current_chunk:
+                chunks.append(current_chunk)
+
+            # Send first chunk as response, rest as followups
+            for i, chunk in enumerate(chunks):
+                if i == 0:
+                    await interaction.followup.send(chunk)
+                else:
+                    await interaction.followup.send(chunk)
+
+    except RuntimeError as re:
+        logger.exception(f"sd-list: Runtime error - {re}")
+        await interaction.followup.send(f"❌ **Error listing checkpoints:** {re}")
+    except Exception as e:
+        logger.exception(f"sd-list: Unexpected error: {e}")
+        await interaction.followup.send(f"❌ **An unexpected error occurred:** {e!s}")
