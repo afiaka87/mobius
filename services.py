@@ -749,7 +749,7 @@ else:
 
 
 K5_API_URL = "http://100.105.155.18:8888"
-SD_API_URL = "http://100.105.155.18:8889"
+SD_API_URL = "http://100.70.95.57:8889"
 
 
 # --- Kandinsky-5 Video Generation Services ---
