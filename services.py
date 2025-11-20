@@ -804,6 +804,7 @@ else:
 
 
 api_url = "http://100.105.155.18:8888"
+SD_API_URL = "http://100.122.30.53:8889"
 
 # --- Kandinsky-5 Video Generation Services ---
 async def check_kandinsky5_health() -> bool:
@@ -1213,3 +1214,310 @@ async def cancel_kandinsky5_task(task_id: str) -> dict[str, Any]:
     except Exception as e:
         logger.exception(f"Error cancelling Kandinsky-5 task {task_id}: {e}")
         raise RuntimeError(f"Failed to cancel Kandinsky-5 task: {e!s}")
+
+
+# --- Stable Diffusion 1.5 Services ---
+async def check_sd_health() -> bool:
+    """
+    Check if the Stable Diffusion API is healthy and available.
+
+    Returns:
+        True if the API is healthy, False otherwise
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{SD_API_URL}/health")
+            response.raise_for_status()
+
+            # If we got a 200 response, the API is healthy
+            logger.info("Stable Diffusion API health check: OK (HTTP 200)")
+            return True
+
+    except httpx.ConnectError:
+        logger.warning(f"Stable Diffusion API health check: Cannot connect to {SD_API_URL}")
+        return False
+    except httpx.TimeoutException:
+        logger.warning(f"Stable Diffusion API health check: Connection timeout to {SD_API_URL}")
+        return False
+    except httpx.HTTPStatusError as e:
+        logger.warning(f"Stable Diffusion API health check: HTTP error {e.response.status_code}")
+        return False
+    except Exception as e:
+        logger.exception(f"Stable Diffusion API health check: Unexpected error - {type(e).__name__}: {e}")
+        return False
+
+
+async def get_sd_schedulers() -> list[dict[str, str]]:
+    """
+    Get the list of available schedulers from the Stable Diffusion API.
+
+    Returns:
+        List of scheduler dictionaries with 'name' and 'description' keys
+
+    Raises:
+        RuntimeError: If API call fails
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{SD_API_URL}/schedulers")
+            response.raise_for_status()
+            schedulers = response.json()
+
+            logger.info(f"Retrieved {len(schedulers)} schedulers from SD API")
+            return schedulers
+
+    except httpx.ConnectError:
+        logger.exception(f"Cannot connect to Stable Diffusion API at {SD_API_URL}")
+        raise RuntimeError(
+            f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running."
+        )
+    except httpx.HTTPStatusError as e:
+        logger.exception(
+            f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}"
+        )
+        raise RuntimeError(
+            f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}"
+        )
+    except Exception as e:
+        logger.exception(f"Error getting SD schedulers: {e}")
+        raise RuntimeError(f"Failed to get SD schedulers: {e!s}")
+
+
+async def list_sd_experiments() -> list[str]:
+    """
+    List all available experiment/run directories.
+
+    Returns:
+        List of experiment run paths (e.g., ["laion2b/initial", "laion2b/resume"])
+
+    Raises:
+        RuntimeError: If API call fails
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{SD_API_URL}/experiments")
+            response.raise_for_status()
+            data = response.json()
+
+            experiment_runs = data.get("experiment_runs", [])
+            logger.info(f"Retrieved {len(experiment_runs)} experiment runs from SD API")
+            return experiment_runs
+
+    except httpx.ConnectError:
+        logger.exception(f"Cannot connect to Stable Diffusion API at {SD_API_URL}")
+        raise RuntimeError(
+            f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running."
+        )
+    except httpx.HTTPStatusError as e:
+        logger.exception(
+            f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}"
+        )
+        raise RuntimeError(
+            f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}"
+        )
+    except Exception as e:
+        logger.exception(f"Error listing SD experiments: {e}")
+        raise RuntimeError(f"Failed to list SD experiments: {e!s}")
+
+
+async def list_sd_checkpoints(experiment_run: str) -> list[str]:
+    """
+    List all checkpoints in a specific experiment/run.
+
+    Args:
+        experiment_run: The experiment run path (e.g., "laion2b/resume")
+
+    Returns:
+        List of checkpoint names (e.g., ["checkpoint-17500", "checkpoint-20000"])
+
+    Raises:
+        RuntimeError: If API call fails
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # URL encode the experiment_run path
+            from urllib.parse import quote
+            encoded_path = quote(experiment_run, safe="")
+
+            response = await client.get(f"{SD_API_URL}/experiments/{encoded_path}/checkpoints")
+            response.raise_for_status()
+            data = response.json()
+
+            checkpoints = data.get("checkpoints", [])
+            logger.info(f"Retrieved {len(checkpoints)} checkpoints from {experiment_run}")
+            return checkpoints
+
+    except httpx.ConnectError:
+        logger.exception(f"Cannot connect to Stable Diffusion API at {SD_API_URL}")
+        raise RuntimeError(
+            f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running."
+        )
+    except httpx.HTTPStatusError as e:
+        logger.exception(
+            f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}"
+        )
+        raise RuntimeError(
+            f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}"
+        )
+    except Exception as e:
+        logger.exception(f"Error listing SD checkpoints for {experiment_run}: {e}")
+        raise RuntimeError(f"Failed to list SD checkpoints: {e!s}")
+
+
+async def load_sd_checkpoint(checkpoint_path: str | None) -> dict[str, Any]:
+    """
+    Load a Stable Diffusion checkpoint.
+
+    Args:
+        checkpoint_path: Path to the checkpoint (e.g., "checkpoints/laion2b/resume/checkpoint-17500")
+                        or None to load the base model
+
+    Returns:
+        Dictionary containing:
+        - status: Status message
+        - checkpoint_name: Name of loaded checkpoint
+        - is_lora: Whether the checkpoint is a LoRA
+
+    Raises:
+        RuntimeError: If API call fails
+    """
+    try:
+        payload = {"checkpoint_path": checkpoint_path}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(f"{SD_API_URL}/load", json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(f"Loaded SD checkpoint: {data.get('checkpoint_name', 'Base Model')}")
+            return data
+
+    except httpx.ConnectError:
+        logger.exception(f"Cannot connect to Stable Diffusion API at {SD_API_URL}")
+        raise RuntimeError(
+            f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running."
+        )
+    except httpx.HTTPStatusError as e:
+        logger.exception(
+            f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}"
+        )
+        raise RuntimeError(
+            f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}"
+        )
+    except Exception as e:
+        logger.exception(f"Error loading SD checkpoint: {e}")
+        raise RuntimeError(f"Failed to load SD checkpoint: {e!s}")
+
+
+async def generate_sd_images(
+    prompt: str,
+    negative_prompt: str = "",
+    num_inference_steps: int = 8,
+    guidance_scale: float = 7.5,
+    width: int = 512,
+    height: int = 512,
+    num_images: int = 1,
+    seed: int = -1,
+    lora_scale: float = 1.0,
+    scheduler_name: str = "DPM++ SDE",
+) -> list[Path]:
+    """
+    Generate images using the Stable Diffusion API.
+
+    Args:
+        prompt: Text description of desired image
+        negative_prompt: Things to avoid in the image
+        num_inference_steps: Number of denoising steps (1-100)
+        guidance_scale: CFG scale (1.0-20.0)
+        width: Image width in pixels (must be multiple of 64)
+        height: Image height in pixels (must be multiple of 64)
+        num_images: Number of images to generate (1-4)
+        seed: Random seed (-1 for random)
+        lora_scale: LoRA intensity (0.0-2.0)
+        scheduler_name: Sampling method
+
+    Returns:
+        List of paths to saved image files
+
+    Raises:
+        ValueError: If width/height are not multiples of 64
+        RuntimeError: If API call fails or returns invalid data
+    """
+    # Validate resolution (width and height must be multiples of 64)
+    if width % 64 != 0:
+        raise ValueError(f"Width must be a multiple of 64, got {width}")
+    if height % 64 != 0:
+        raise ValueError(f"Height must be a multiple of 64, got {height}")
+
+    logger.info(
+        f"Generating SD images: prompt='{prompt[:50]}...', "
+        f"resolution={width}x{height}, steps={num_inference_steps}, "
+        f"guidance={guidance_scale}, num_images={num_images}, "
+        f"scheduler={scheduler_name}, seed={seed}, lora_scale={lora_scale}"
+    )
+
+    payload = {
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "num_inference_steps": num_inference_steps,
+        "guidance_scale": guidance_scale,
+        "width": width,
+        "height": height,
+        "num_images": num_images,
+        "seed": seed,
+        "lora_scale": lora_scale,
+        "scheduler_name": scheduler_name,
+    }
+
+    try:
+        # Submit generation request (synchronous response)
+        async with httpx.AsyncClient(timeout=300.0) as client:  # 5 minute timeout for generation
+            response = await client.post(f"{SD_API_URL}/generate", json=payload)
+            response.raise_for_status()
+            result_data = response.json()
+
+        # Extract images from result
+        if "images" not in result_data or not result_data["images"]:
+            logger.error(f"SD API result missing image data. Got keys: {list(result_data.keys())}")
+            raise RuntimeError("Stable Diffusion API did not return any images")
+
+        # Create cache directory
+        cache_dir: Path = Path(".cache/sd_generated")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Decode and save all images
+        image_paths: list[Path] = []
+
+        for i, image_base64 in enumerate(result_data["images"]):
+            # Decode image
+            image_bytes: bytes = base64.b64decode(image_base64)
+
+            # Generate filename
+            safe_prompt = "".join(c if c.isalnum() else "_" for c in prompt[:30])
+            filename = f"sd_{safe_prompt}_{i:02d}_{seed}.png"
+            file_path = cache_dir / filename
+
+            with open(file_path, "wb") as f:
+                f.write(image_bytes)
+
+            image_paths.append(file_path)
+            logger.info(f"SD image {i+1}/{len(result_data['images'])} saved: {file_path}")
+
+        logger.info(f"SD generation complete. Generated {len(image_paths)} images.")
+        return image_paths
+
+    except httpx.ConnectError:
+        logger.exception(f"Cannot connect to Stable Diffusion API at {SD_API_URL}")
+        raise RuntimeError(
+            f"Cannot connect to Stable Diffusion API at {SD_API_URL}. Please check if it's running."
+        )
+    except httpx.HTTPStatusError as e:
+        logger.exception(
+            f"Stable Diffusion API HTTP error: {e.response.status_code} - {e.response.text}"
+        )
+        raise RuntimeError(
+            f"Stable Diffusion API error: {e.response.status_code} - {e.response.text}"
+        )
+    except Exception as e:
+        logger.exception(f"Error generating SD images: {e}")
+        raise RuntimeError(f"Failed to generate SD images: {e!s}")
