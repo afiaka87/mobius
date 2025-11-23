@@ -1,0 +1,10 @@
+[project]
+name = "stream-status"
+version = "0.1.0"
+description = "Discord notification bot for Cloudflare Stream status monitoring"
+requires-python = ">=3.8"
+dependencies = [
+    "discord.py>=2.3.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+]
