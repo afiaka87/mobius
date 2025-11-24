@@ -48,6 +48,8 @@ class StreamMonitor:
     def __init__(self):
         self.is_live = False  # Track current stream status
         self.client = None
+        self.admin = None  # Discord member to reference
+        self.stream_channel = None  # Channel to send notifications to
 
     def check_stream_status(self):
         """Poll Cloudflare API to check if stream is live."""
@@ -65,11 +67,11 @@ class StreamMonitor:
             logger.error(f"Error checking stream status: {e}")
             return None
 
-    async def send_live_notification(self, channel):
+    async def send_live_notification(self):
         """Send Discord notification that stream is live."""
         try:
-            message = f"<@{DISCORD_MENTION_USER_ID}> started streaming at https://delicious-donuts.com/"
-            await channel.send(message)
+            message = f"**{self.admin.display_name}** started streaming at [delicious-donuts.com](<https://delicious-donuts.com/>)"
+            await self.stream_channel.send(message)
             logger.info("Sent live notification to Discord")
         except Exception as e:
             logger.error(f"Error sending Discord message: {e}")
@@ -79,20 +81,32 @@ class StreamMonitor:
         # Set up Discord client
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.members = True  # Required for get_member()
         self.client = discord.Client(intents=intents)
 
         @self.client.event
         async def on_ready():
             logger.info(f'Discord bot connected as {self.client.user}')
 
-            # Get the channel
-            channel = self.client.get_channel(CHANNEL_ID)
-            if not channel:
+            # Get the guild, channel, and admin member
+            for guild in self.client.guilds:
+                if guild.id == SERVER_ID:
+                    self.admin = guild.get_member(int(DISCORD_MENTION_USER_ID))
+                    self.stream_channel = guild.get_channel(CHANNEL_ID)
+                    break
+
+            if not self.stream_channel:
                 logger.error(f"Could not find channel {CHANNEL_ID}")
                 await self.client.close()
                 return
 
-            logger.info(f"Monitoring channel: {channel.name} in {channel.guild.name}")
+            if not self.admin:
+                logger.error(f"Could not find admin user {DISCORD_MENTION_USER_ID}")
+                await self.client.close()
+                return
+
+            logger.info(f"Monitoring channel: {self.stream_channel.name} in {self.stream_channel.guild.name}")
+            logger.info(f"Admin user: {self.admin.display_name}")
             logger.info(f"Polling every {POLL_INTERVAL} seconds")
 
             # Start monitoring loop
@@ -104,7 +118,7 @@ class StreamMonitor:
                         # Detect offline -> live transition
                         if current_status and not self.is_live:
                             logger.info("Stream went LIVE! Sending notification...")
-                            await self.send_live_notification(channel)
+                            await self.send_live_notification()
                             self.is_live = True
 
                         # Detect live -> offline transition (silent)
