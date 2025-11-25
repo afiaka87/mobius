@@ -1412,3 +1412,84 @@ async def generate_sd_images(
     except Exception as e:
         logger.exception(f"Error generating SD images: {e}")
         raise RuntimeError(f"Failed to generate SD images: {e!s}")
+
+
+# --- Fal AI FLUX 2 Image Generation ---
+
+
+async def generate_flux2_image(
+    prompt: str,
+    image_size: str | dict[str, int] = "landscape_4_3",
+    num_inference_steps: int = 28,
+    guidance_scale: float = 2.5,
+    num_images: int = 1,
+    seed: int | None = None,
+    acceleration: str = "regular",
+    enable_prompt_expansion: bool = False,
+    enable_safety_checker: bool = True,
+    output_format: str = "png",
+) -> dict[str, Any]:
+    """
+    Generate images using FLUX.2 [dev] from Black Forest Labs via Fal AI.
+
+    Args:
+        prompt: Text description of the image to generate
+        image_size: Size preset or dict with width/height (512-2048).
+                   Presets: square_hd, square, portrait_4_3, portrait_16_9,
+                   landscape_4_3, landscape_16_9
+        num_inference_steps: Number of inference steps (1-100, default: 28)
+        guidance_scale: How closely to follow the prompt (1.0-20.0, default: 2.5)
+        num_images: Number of images to generate (1-4)
+        seed: Random seed for reproducibility (None for random)
+        acceleration: Speed vs quality tradeoff (none, regular, high)
+        enable_prompt_expansion: Whether to expand the prompt for better results
+        enable_safety_checker: Whether to enable NSFW filtering
+        output_format: Output format (jpeg, png, webp)
+
+    Returns:
+        Dictionary containing:
+        - images: List of dicts with url, width, height
+        - seed: Seed used for generation
+        - prompt: The prompt used (may be expanded)
+        - has_nsfw_concepts: List of booleans for each image
+
+    Raises:
+        RuntimeError: If API call fails
+    """
+    logger.info(
+        f"FLUX 2: Generating image(s) with prompt='{prompt[:50]}...', "
+        f"size={image_size}, steps={num_inference_steps}, guidance={guidance_scale}, "
+        f"num_images={num_images}, acceleration={acceleration}"
+    )
+
+    # Build the request payload
+    request_input: dict[str, Any] = {
+        "prompt": prompt,
+        "image_size": image_size,
+        "num_inference_steps": num_inference_steps,
+        "guidance_scale": guidance_scale,
+        "num_images": num_images,
+        "acceleration": acceleration,
+        "enable_prompt_expansion": enable_prompt_expansion,
+        "enable_safety_checker": enable_safety_checker,
+        "output_format": output_format,
+    }
+
+    # Only include seed if explicitly provided
+    if seed is not None:
+        request_input["seed"] = seed
+
+    try:
+        # Use fal_client.subscribe for async queue handling
+        result = await asyncio.to_thread(
+            fal_client.subscribe,
+            "fal-ai/flux-2",
+            arguments=request_input,
+        )
+
+        logger.info(f"FLUX 2: Generation complete, received {len(result.get('images', []))} image(s)")
+        return result
+
+    except Exception as e:
+        logger.exception(f"FLUX 2 API error: {e}")
+        raise RuntimeError(f"FLUX 2 generation failed: {e!s}")
