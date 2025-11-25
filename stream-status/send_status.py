@@ -32,8 +32,10 @@ LIVE_INPUT_ID = "e951bde02e1000f55e68106c049a7859"
 CUSTOMER_CODE = "6qfdxdt6v9r0omsq"
 
 # Test Discord server/channel
-SERVER_ID = 1249087687965671475
-CHANNEL_ID = 1249087688519454762
+# SERVER_ID = 1249087687965671475 # Test server
+# CHANNEL_ID = 1249087688519454762
+SERVER_ID = 870344451770449990
+CHANNEL_ID = 1375319100124827748
 
 # Cloudflare API endpoint
 CF_API_URL = f"https://customer-{CUSTOMER_CODE}.cloudflarestream.com/{LIVE_INPUT_ID}/lifecycle"
@@ -145,7 +147,7 @@ class StreamMonitor(discord.Client):
             return
 
         try:
-            message = f"**{self.admin.display_name}** started streaming at https://delicious-donuts.com/"
+            message = f"**{self.admin.display_name}** started streaming at [delicious-donuts.com](<https://delicious-donuts.com/>)"
             await self.stream_channel.send(message)
             logger.info("Sent live notification to Discord")
         except discord.DiscordException:
