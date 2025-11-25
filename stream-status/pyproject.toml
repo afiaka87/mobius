@@ -4,7 +4,15 @@ version = "0.1.0"
 description = "Discord notification bot for Cloudflare Stream status monitoring"
 requires-python = ">=3.8"
 dependencies = [
+    "aiohttp>=3.10.11",
     "discord.py>=2.3.0",
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14.1",
+    "ruff>=0.14.6",
+    "types-requests>=2.32.0.20241016",
 ]
