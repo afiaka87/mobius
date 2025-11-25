@@ -8,6 +8,7 @@ handling user interactions and calling appropriate services.
 """
 
 import asyncio
+import io
 import logging
 import os
 import tempfile
@@ -1282,3 +1283,185 @@ async def sd_list_command(interaction: discord.Interaction) -> None:
     except Exception as e:
         logger.exception(f"sd-list: Unexpected error: {e}")
         await interaction.followup.send(f"❌ **An unexpected error occurred:** {e!s}")
+
+
+# --- FLUX 2 Commands ---
+
+# Image size choices for FLUX 2
+FLUX2_SIZE_CHOICES = [
+    app_commands.Choice(name="Landscape 4:3 (default)", value="landscape_4_3"),
+    app_commands.Choice(name="Landscape 16:9", value="landscape_16_9"),
+    app_commands.Choice(name="Portrait 4:3", value="portrait_4_3"),
+    app_commands.Choice(name="Portrait 16:9", value="portrait_16_9"),
+    app_commands.Choice(name="Square HD", value="square_hd"),
+    app_commands.Choice(name="Square", value="square"),
+]
+
+# Acceleration choices for FLUX 2
+FLUX2_ACCELERATION_CHOICES = [
+    app_commands.Choice(name="Regular (default)", value="regular"),
+    app_commands.Choice(name="High (fastest)", value="high"),
+    app_commands.Choice(name="None (highest quality)", value="none"),
+]
+
+# Output format choices for FLUX 2
+FLUX2_FORMAT_CHOICES = [
+    app_commands.Choice(name="PNG (default)", value="png"),
+    app_commands.Choice(name="JPEG", value="jpeg"),
+    app_commands.Choice(name="WebP", value="webp"),
+]
+
+
+@app_commands.command(name="flux2", description="Generate images with FLUX.2 [dev] from Black Forest Labs")
+@app_commands.describe(
+    prompt="Text description of the image to generate",
+    image_size="Image aspect ratio and size preset",
+    num_inference_steps="Number of denoising steps (1-100, default: 28)",
+    guidance_scale="How closely to follow prompt (1.0-20.0, default: 2.5)",
+    num_images="Number of images to generate (1-4, default: 1)",
+    seed="Random seed for reproducibility (leave empty for random)",
+    acceleration="Speed vs quality tradeoff",
+    expand_prompt="Expand prompt for better results",
+    safety_checker="Enable NSFW filtering",
+    output_format="Output image format",
+    custom_width="Custom width in pixels (512-2048, overrides image_size)",
+    custom_height="Custom height in pixels (512-2048, overrides image_size)",
+)
+@app_commands.choices(image_size=FLUX2_SIZE_CHOICES)
+@app_commands.choices(acceleration=FLUX2_ACCELERATION_CHOICES)
+@app_commands.choices(output_format=FLUX2_FORMAT_CHOICES)
+async def flux2_command(
+    interaction: discord.Interaction,
+    prompt: str,
+    image_size: str = "landscape_4_3",
+    num_inference_steps: app_commands.Range[int, 1, 100] = 28,
+    guidance_scale: app_commands.Range[float, 1.0, 20.0] = 2.5,
+    num_images: app_commands.Range[int, 1, 4] = 1,
+    seed: int | None = None,
+    acceleration: str = "regular",
+    expand_prompt: bool = False,
+    safety_checker: bool = True,
+    output_format: str = "png",
+    custom_width: app_commands.Range[int, 512, 2048] | None = None,
+    custom_height: app_commands.Range[int, 512, 2048] | None = None,
+) -> None:
+    """Generate images using FLUX.2 [dev] via Fal AI."""
+
+    # Determine image size - custom dimensions override preset
+    final_size: str | dict[str, int]
+    if custom_width is not None and custom_height is not None:
+        final_size = {"width": custom_width, "height": custom_height}
+        size_display = f"{custom_width}x{custom_height}"
+    elif custom_width is not None or custom_height is not None:
+        await interaction.response.send_message(
+            "❌ **Error:** Both custom_width and custom_height must be provided together.",
+            ephemeral=True,
+        )
+        return
+    else:
+        final_size = image_size
+        size_display = image_size
+
+    # Log the request
+    logger.info(
+        f"flux2: User {interaction.user} requested image generation: "
+        f"prompt='{prompt[:50]}...', size={size_display}, "
+        f"steps={num_inference_steps}, acceleration={acceleration}, num_images={num_images}"
+    )
+
+    # Defer the response
+    await interaction.response.defer()
+
+    try:
+        # Update status
+        await interaction.edit_original_response(
+            content=f"🎨 **Generating {num_images} image(s) with FLUX.2...**\n"
+            f"**Prompt:** {prompt[:100]}{'...' if len(prompt) > 100 else ''}\n"
+            f"**Size:** {size_display} | **Steps:** {num_inference_steps} | **Acceleration:** {acceleration}"
+        )
+
+        # Generate images
+        start_time = time.time()
+        result = await services.generate_flux2_image(
+            prompt=prompt,
+            image_size=final_size,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            num_images=num_images,
+            seed=seed,
+            acceleration=acceleration,
+            enable_prompt_expansion=expand_prompt,
+            enable_safety_checker=safety_checker,
+            output_format=output_format,
+        )
+        generation_time = time.time() - start_time
+
+        # Extract images from result
+        images = result.get("images", [])
+        result_seed = result.get("seed", "unknown")
+        used_prompt = result.get("prompt", prompt)
+        nsfw_flags = result.get("has_nsfw_concepts", [])
+
+        if not images:
+            await interaction.edit_original_response(
+                content="❌ **Error:** No images returned from FLUX.2 API"
+            )
+            return
+
+        # Download images and create Discord files
+        import httpx
+
+        discord_files = []
+        async with httpx.AsyncClient() as client:
+            for i, img_data in enumerate(images):
+                img_url = img_data.get("url")
+                if not img_url:
+                    continue
+
+                response = await client.get(img_url)
+                response.raise_for_status()
+
+                # Create filename
+                safe_prompt = "".join(c if c.isalnum() else "_" for c in prompt[:30])
+                filename = f"flux2_{safe_prompt}_{i:02d}.{output_format}"
+
+                discord_files.append(
+                    discord.File(
+                        fp=io.BytesIO(response.content),
+                        filename=filename,
+                    )
+                )
+
+        # Check for NSFW content
+        nsfw_warning = ""
+        if any(nsfw_flags):
+            nsfw_warning = "\n⚠️ **Warning:** Some images may contain NSFW content"
+
+        # Show expanded prompt if it was used
+        prompt_info = f"**Prompt:** {prompt}"
+        if expand_prompt and used_prompt != prompt:
+            prompt_info = f"**Original Prompt:** {prompt}\n**Expanded:** {used_prompt[:200]}{'...' if len(used_prompt) > 200 else ''}"
+
+        # Send the result
+        result_message = (
+            f"✅ **Generated {len(discord_files)} image(s)** in {generation_time:.1f}s\n"
+            f"{prompt_info}\n"
+            f"**Size:** {size_display} | **Steps:** {num_inference_steps} | "
+            f"**Guidance:** {guidance_scale} | **Seed:** {result_seed}{nsfw_warning}"
+        )
+
+        await interaction.edit_original_response(
+            content=result_message,
+            attachments=discord_files,
+        )
+
+    except RuntimeError as re:
+        logger.exception(f"flux2: Runtime error - {re}")
+        await interaction.edit_original_response(
+            content=f"❌ **Error generating image:** {re}"
+        )
+    except Exception as e:
+        logger.exception(f"flux2: Unexpected error: {e}")
+        await interaction.edit_original_response(
+            content=f"❌ **An unexpected error occurred:** {e!s}"
+        )
