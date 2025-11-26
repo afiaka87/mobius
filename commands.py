@@ -105,8 +105,6 @@ COMMANDS_INFO: Final[dict[str, str]] = {
     "rembg": "Remove image background using Rembg.",
     "gptimg": "Generate or edit images using OpenAI's GPT Image model.",
     "k5": "Generate a video using Kandinsky-5 text-to-video model.",
-    "k5_list": "List the Kandinsky-5 task queue.",
-    "k5_cancel": "Cancel a pending Kandinsky-5 task by task ID.",
     "sd": "Generate images using Stable Diffusion 1.5 model.",
     "sd-load": "Load a Stable Diffusion checkpoint.",
     "sd-list": "List available Stable Diffusion checkpoints.",
@@ -172,10 +170,6 @@ async def help_command(interaction: discord.Interaction) -> None:
 `/youtube` - Search YouTube (returns top result)
 `/google` - Search the web (Google Custom Search)
 `/temp` - Get current temperature in Fayetteville, AR
-
-**📋 Queue Management**
-`/k5-list` - List Kandinsky-5 task queue
-`/k5-cancel` - Cancel a pending Kandinsky-5 task
 
 **ℹ️ Help**
 `/help` - Show this help message"""
@@ -944,107 +938,6 @@ async def kandinsky5_command(
         await interaction.followup.send(f"❌ Error generating video: {re}")
     except Exception as e:
         logger.exception(f"kandinsky5: Unexpected error during video generation: {e}")
-        await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}")
-
-
-@app_commands.command(name="k5-list", description="List the Kandinsky-5 task queue")
-async def k5_list_command(interaction: discord.Interaction) -> None:
-    """List all tasks in the Kandinsky-5 queue."""
-    await interaction.response.defer(thinking=True)
-
-    try:
-        logger.info(f"k5-list: User {interaction.user} requested queue list")
-
-        # Get queue from API
-        queue_data = await services.get_kandinsky5_queue()
-
-        tasks = queue_data.get("tasks", [])
-        total_queued = queue_data.get("total_queued", 0)
-        current_task_id = queue_data.get("current_task_id")
-
-        # Build response message
-        if not tasks:
-            await interaction.followup.send("📋 The Kandinsky-5 queue is empty.")
-            return
-
-        # Format the queue display
-        lines = [f"📋 **Kandinsky-5 Queue** ({total_queued} pending)\n"]
-
-        for i, task in enumerate(tasks):
-            task_id = task.get("task_id", "unknown")
-            status = task.get("status", "unknown")
-            position = task.get("position", "?")
-            is_current = task.get("is_current", False)
-            prompt = task.get("prompt", "")
-            task_type = task.get("task_type", "unknown")
-            total_videos = task.get("total_videos", 1)
-
-            # Status emoji mapping
-            status_emoji = {
-                "pending": "⏳",
-                "processing": "🎨",
-                "completed": "✅",
-                "failed": "❌",
-                "cancelled": "🚫",
-            }.get(status.lower(), "📋")
-
-            # Format prompt (truncate to 50 chars for better readability)
-            if prompt:
-                display_prompt = prompt[:50] + "..." if len(prompt) > 50 else prompt
-                display_prompt = discord.utils.escape_markdown(display_prompt)
-            else:
-                display_prompt = f"batch ({total_videos} videos)"
-
-            # Mark currently processing task with arrow
-            current_marker = "**→** " if is_current else ""
-
-            # Format task entry with better Discord markdown
-            task_line = f"{current_marker}**[{position}]** {status_emoji} **{status.title()}**"
-            id_line = f"`{task_id}`"
-            prompt_line = f"_{display_prompt}_"
-
-            lines.append(task_line)
-            lines.append(id_line)
-            lines.append(prompt_line)
-
-            # Add blank line between tasks (except after last one)
-            if i < len(tasks) - 1:
-                lines.append("")
-
-        message = "\n".join(lines)
-
-        await interaction.followup.send(message)
-
-    except RuntimeError as re:
-        logger.exception(f"k5-list: Runtime error - {re}")
-        await interaction.followup.send(f"❌ Error getting queue: {re}")
-    except Exception as e:
-        logger.exception(f"k5-list: Unexpected error: {e}")
-        await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}")
-
-
-@app_commands.command(name="k5-cancel", description="Cancel a pending Kandinsky-5 task by task ID")
-@app_commands.describe(task_id="The task ID to cancel (get from /k5-list)")
-async def k5_cancel_command(interaction: discord.Interaction, task_id: str) -> None:
-    """Cancel a pending Kandinsky-5 task."""
-    await interaction.response.defer(thinking=True)
-
-    try:
-        logger.info(f"k5-cancel: User {interaction.user} requested to cancel task {task_id}")
-
-        # Attempt to cancel the task
-        result = await services.cancel_kandinsky5_task(task_id)
-
-        message = result.get("message", "Task cancelled successfully")
-        status = result.get("status", "unknown")
-
-        await interaction.followup.send(f"✅ **Task cancelled:** `{task_id[:8]}`\nStatus: {status}\n{message}")
-
-    except RuntimeError as re:
-        logger.exception(f"k5-cancel: Runtime error - {re}")
-        await interaction.followup.send(f"❌ {re}")
-    except Exception as e:
-        logger.exception(f"k5-cancel: Unexpected error: {e}")
         await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}")
 
 
