@@ -21,7 +21,6 @@ from dotenv import load_dotenv
 import commands as my_bot_commands
 
 # Load environment variables from .env file
-# It's good practice to call this early, before other modules might need env vars.
 load_dotenv()
 
 # Set up logging
@@ -58,17 +57,13 @@ def register_all_commands(client: commands.Bot) -> None:
     Raises:
         RuntimeError: If no application commands are found and registered.
     """
-    command_modules: list[Any] = [
-        my_bot_commands
-    ]  # List of modules containing commands
+    command_modules: list[Any] = [my_bot_commands]  # List of modules containing commands
     registered_command_count: int = 0
 
     for module in command_modules:
         for name, obj in inspect.getmembers(module):
             if isinstance(obj, app_commands.Command | app_commands.ContextMenu):
-                logger.info(
-                    f"Adding app command: {obj.name} from module {module.__name__}"
-                )
+                logger.info(f"Adding app command: {obj.name} from module {module.__name__}")
                 client.tree.add_command(obj)
                 registered_command_count += 1
             # Optional: Log skipped members if needed for debugging
@@ -87,9 +82,7 @@ def register_all_commands(client: commands.Bot) -> None:
 
         raise CommandRegistrationError("No application commands registered")
 
-    logger.info(
-        f"Successfully registered {registered_command_count} application commands."
-    )
+    logger.info(f"Successfully registered {registered_command_count} application commands.")
 
 
 async def sync_commands_to_guilds(client: commands.Bot) -> None:
@@ -109,8 +102,7 @@ async def sync_commands_to_guilds(client: commands.Bot) -> None:
     guild_ids_str: str | None = os.getenv("DISCORD_GUILD_IDS")
     if not guild_ids_str:
         logger.error(
-            "DISCORD_GUILD_IDS environment variable not set or empty. "
-            "Cannot sync commands to specific guilds."
+            "DISCORD_GUILD_IDS environment variable not set or empty. Cannot sync commands to specific guilds."
         )
 
         # Depending on requirements, you might want to fall back to global sync
@@ -147,9 +139,7 @@ async def sync_commands_to_guilds(client: commands.Bot) -> None:
             # Optionally re-raise or handle specific HTTP error codes
             raise
         except Exception as e:
-            logger.exception(
-                f"An unexpected error occurred while syncing to guild {guild.id}: {e}"
-            )
+            logger.exception(f"An unexpected error occurred while syncing to guild {guild.id}: {e}")
             raise
 
 
@@ -157,11 +147,14 @@ async def sync_commands_to_guilds(client: commands.Bot) -> None:
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
     """Handle application command errors."""
-    logger.error(f"Command error: {error} for command: {interaction.command.name if interaction.command else 'Unknown'}")
+    logger.error(
+        f"Command error: {error} for command: {interaction.command.name if interaction.command else 'Unknown'}"
+    )
     if interaction.response.is_done():
         await interaction.followup.send(f"An error occurred: {error}", ephemeral=True)
     else:
         await interaction.response.send_message(f"An error occurred: {error}", ephemeral=True)
+
 
 @bot.event
 async def on_ready() -> None:
@@ -173,9 +166,7 @@ async def on_ready() -> None:
     if bot.user:
         logger.info(f"Logged in as {bot.user.name} (ID: {bot.user.id})")
     else:
-        logger.info(
-            "Logged in, but bot.user is not yet available."
-        )  # Should not happen if event is correct
+        logger.info("Logged in, but bot.user is not yet available.")  # Should not happen if event is correct
 
     logger.info("Registering commands...")
     try:
@@ -206,9 +197,7 @@ def main() -> None:
     """
     discord_api_token: str | None = os.getenv("DISCORD_API_TOKEN")
     if not discord_api_token:
-        logger.critical(
-            "DISCORD_API_TOKEN environment variable not set. Bot cannot start."
-        )
+        logger.critical("DISCORD_API_TOKEN environment variable not set. Bot cannot start.")
         return
 
     logger.info("Starting bot...")
