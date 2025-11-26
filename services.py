@@ -12,7 +12,6 @@ import asyncio
 import base64
 import logging
 import os
-import random
 from collections.abc import Sequence
 from io import BytesIO
 from pathlib import Path
@@ -35,12 +34,12 @@ except ImportError:
     ComfyWorkflowWrapper = Any
 
 # Local application/library specific imports
+from tasks import simple_poll_task
 from utils import (  # Assuming these are correctly defined in utils.py
     convert_audio_to_waveform_video,
     # image_to_base64_url, # Not directly used in this file after refactor, but kept if utils uses it
     # create_mask_with_alpha, # Not directly used here, gptimg command prepares mask
 )
-from tasks import TaskProgress, simple_poll_task
 
 # Initialize logger
 logger: logging.Logger = logging.getLogger(__name__)
@@ -720,7 +719,8 @@ class ObscastAPIClient:
         try:
             response = await self._client.request(method, endpoint, **kwargs)
             response.raise_for_status()
-            return response.json()
+            result: dict[str, Any] = response.json()
+            return result
         except httpx.HTTPStatusError as e:
             logger.exception(f"Obscast API request failed: {e.response.status_code} - {e.response.text}")
             raise ObscastAPIError(f"API request failed: {e.response.text}", e.response.status_code) from e
@@ -1076,7 +1076,7 @@ async def get_kandinsky5_queue() -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{K5_API_URL}/tasks/queue")
             response.raise_for_status()
-            data = response.json()
+            data: dict[str, Any] = response.json()
 
             logger.info(f"Kandinsky-5 queue retrieved: {data.get('total_queued', 0)} tasks pending")
             return data
@@ -1114,7 +1114,7 @@ async def cancel_kandinsky5_task(task_id: str) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(f"{api_url}/task/{task_id}/cancel")
             response.raise_for_status()
-            data = response.json()
+            data: dict[str, Any] = response.json()
 
             logger.info(f"Kandinsky-5 task {task_id} cancelled: {data.get('message')}")
             return data
@@ -1181,7 +1181,7 @@ async def get_sd_schedulers() -> list[dict[str, str]]:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{SD_API_URL}/schedulers")
             response.raise_for_status()
-            schedulers = response.json()
+            schedulers: list[dict[str, str]] = response.json()
 
             logger.info(f"Retrieved {len(schedulers)} schedulers from SD API")
             return schedulers
@@ -1211,9 +1211,9 @@ async def list_sd_experiments() -> list[str]:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{SD_API_URL}/experiments")
             response.raise_for_status()
-            data = response.json()
+            data: dict[str, Any] = response.json()
 
-            experiment_runs = data.get("experiment_runs", [])
+            experiment_runs: list[str] = data.get("experiment_runs", [])
             logger.info(f"Retrieved {len(experiment_runs)} experiment runs from SD API")
             return experiment_runs
 
@@ -1250,9 +1250,9 @@ async def list_sd_checkpoints(experiment_run: str) -> list[str]:
 
             response = await client.get(f"{SD_API_URL}/experiments/{encoded_path}/checkpoints")
             response.raise_for_status()
-            data = response.json()
+            data: dict[str, Any] = response.json()
 
-            checkpoints = data.get("checkpoints", [])
+            checkpoints: list[str] = data.get("checkpoints", [])
             logger.info(f"Retrieved {len(checkpoints)} checkpoints from {experiment_run}")
             return checkpoints
 
@@ -1290,7 +1290,7 @@ async def load_sd_checkpoint(checkpoint_path: str | None) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(f"{SD_API_URL}/load", json=payload)
             response.raise_for_status()
-            data = response.json()
+            data: dict[str, Any] = response.json()
 
             logger.info(f"Loaded SD checkpoint: {data.get('checkpoint_name', 'Base Model')}")
             return data
@@ -1457,7 +1457,7 @@ async def generate_flux2_image(
         RuntimeError: If API call fails
     """
     logger.info(
-        f"FLUX 2: Generating image(s) with prompt='{prompt[:50]}...', "
+        f"FLUX 2: Generating image(s) with prompt='{prompt[:100]}...', "
         f"size={image_size}, steps={num_inference_steps}, guidance={guidance_scale}, "
         f"num_images={num_images}, acceleration={acceleration}"
     )
