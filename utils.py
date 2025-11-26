@@ -16,7 +16,6 @@ import mimetypes  # For guessing MIME type from file extension
 import warnings
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
 
 import cv2
 import discord
@@ -111,14 +110,10 @@ def image_to_base64_url(image_path: Path) -> str:
             if image_format:
                 mime_type = f"image/{image_format}"
             else:
-                logger.warning(
-                    f"Could not determine MIME type for file {image_path} using mimetypes or imghdr."
-                )
+                logger.warning(f"Could not determine MIME type for file {image_path} using mimetypes or imghdr.")
                 raise MimeTypeError("Could not determine MIME type")
         except Exception:
-            logger.exception(
-                f"Error determining image type with imghdr for {image_path}"
-            )
+            logger.exception(f"Error determining image type with imghdr for {image_path}")
             raise MimeTypeError("Failed to process image format")
 
     try:
@@ -134,9 +129,7 @@ def image_to_base64_url(image_path: Path) -> str:
     return base64_url
 
 
-def convert_base64_to_discord_file(
-    base64_image_data: str, filename: str = "image.png"
-) -> discord.File:
+def convert_base64_to_discord_file(base64_image_data: str, filename: str = "image.png") -> discord.File:
     """
     Converts a base64 encoded image string (without data URL prefix) to a discord.File object.
 
@@ -181,9 +174,7 @@ def convert_pil_image_to_discord_file(
         image_stream: io.BytesIO = io.BytesIO()
         pil_image.save(image_stream, format=image_format)
         image_stream.seek(0)  # Reset stream position to the beginning
-        logger.info(
-            f"Converted PIL Image to discord.File with filename: {filename}, format: {image_format}"
-        )
+        logger.info(f"Converted PIL Image to discord.File with filename: {filename}, format: {image_format}")
         return discord.File(fp=image_stream, filename=filename)
     except Exception:
         logger.exception("Unexpected error converting PIL Image to discord.File")
@@ -219,11 +210,7 @@ def download_image(image_url: str, save_dir: Path = TEMP_FILE_DIR) -> Path:
     # Generate a somewhat unique filename from the URL or use a timestamp
     try:
         url_path = Path(httpx.URL(image_url).path)
-        base_filename = (
-            url_path.stem
-            if url_path.stem
-            else f"image_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        )
+        base_filename = url_path.stem if url_path.stem else f"image_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     except httpx.InvalidURL:
         logger.warning(f"Invalid URL format for base filename: {image_url}")
         base_filename = f"image_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -242,19 +229,13 @@ def download_image(image_url: str, save_dir: Path = TEMP_FILE_DIR) -> Path:
                 detected_type = content_type_header.split("image/")[1].split(";")[0]
             else:
                 # Try to determine from the image content
-                detected_type_from_content: str | None = imghdr.what(
-                    None, h=image_bytes
-                )
-                detected_type = (
-                    detected_type_from_content if detected_type_from_content else ""
-                )
+                detected_type_from_content: str | None = imghdr.what(None, h=image_bytes)
+                detected_type = detected_type_from_content if detected_type_from_content else ""
                 if not detected_type:
                     logger.warning(
                         f"Unable to determine image file type for URL: {image_url}. Header: {content_type_header}"
                     )
-                    raise MimeTypeError(
-                        f"Unable to determine image file type for URL: {image_url}"
-                    )
+                    raise MimeTypeError(f"Unable to determine image file type for URL: {image_url}")
 
             # Sanitize detected_type if it contains characters not suitable for extension
             sanitized_type = "".join(c for c in detected_type if c.isalnum())
@@ -265,9 +246,7 @@ def download_image(image_url: str, save_dir: Path = TEMP_FILE_DIR) -> Path:
             logger.info(f"Image downloaded from {image_url} and saved as {save_path}")
             return save_path
     except httpx.HTTPStatusError as e:
-        logger.exception(
-            f"HTTP error downloading image {image_url}: {e.response.status_code}"
-        )
+        logger.exception(f"HTTP error downloading image {image_url}: {e.response.status_code}")
         raise DownloadError(f"HTTP error: {e.response.status_code}")
     except httpx.InvalidURL:
         logger.exception(f"Invalid URL provided: {image_url}")
@@ -298,11 +277,7 @@ async def download_image_async(image_url: str, save_dir: Path = TEMP_FILE_DIR) -
     # Generate a somewhat unique filename from the URL or use a timestamp
     try:
         url_path = Path(httpx.URL(image_url).path)
-        base_filename = (
-            url_path.stem
-            if url_path.stem
-            else f"image_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-        )
+        base_filename = url_path.stem if url_path.stem else f"image_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
     except httpx.InvalidURL:
         logger.warning(f"Invalid URL format for base filename: {image_url}")
         base_filename = f"image_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
@@ -380,24 +355,18 @@ async def download_image_as_b64_data_url(image_url: str) -> str:
                 if img_type:
                     mime_type = f"image/{img_type}"
                 else:
-                    logger.warning(
-                        f"Could not determine image type for URL: {image_url}"
-                    )
+                    logger.warning(f"Could not determine image type for URL: {image_url}")
                     raise MimeTypeError("Could not determine image MIME type")
 
             image_base64: str = base64.b64encode(image_bytes).decode("utf-8")
             data_url: str = f"data:{mime_type};base64,{image_base64}"
-            logger.info(
-                f"Successfully converted image from {image_url} to base64 data URL ({mime_type})."
-            )
+            logger.info(f"Successfully converted image from {image_url} to base64 data URL ({mime_type}).")
             return data_url
     except httpx.InvalidURL:
         logger.exception(f"Invalid image URL provided for b64 download: {image_url}")
         raise InvalidURLError(f"Invalid URL: {image_url}")
     except httpx.HTTPStatusError as e:
-        logger.exception(
-            f"HTTP error downloading image {image_url} for b64: {e.response.status_code}"
-        )
+        logger.exception(f"HTTP error downloading image {image_url} for b64: {e.response.status_code}")
         raise DownloadError(f"HTTP error: {e.response.status_code}")
     except Exception as e:
         logger.exception(f"Error downloading image {image_url} for b64 conversion")
@@ -408,9 +377,7 @@ class MaskProcessingError(Exception):
     """Raised when an error occurs during mask processing."""
 
 
-def create_alpha_mask_from_mask(
-    mask_path: Path, output_dir: Path = Path(".cache/processed_masks")
-) -> Path:
+def create_alpha_mask_from_mask(mask_path: Path, output_dir: Path = Path(".cache/processed_masks")) -> Path:
     """
     Creates an alpha channel mask from a regular mask image.
     The white areas in the mask become transparent in the output.
@@ -454,14 +421,10 @@ def create_alpha_mask_from_mask(
         logger.info(f"Created mask with alpha channel at: {alpha_mask_path}")
         return alpha_mask_path
     except FileNotFoundError:
-        logger.exception(
-            f"Error processing mask: Input file {mask_path} not found during PIL operations."
-        )
+        logger.exception(f"Error processing mask: Input file {mask_path} not found during PIL operations.")
         raise ImageFileNotFoundError("Mask file not found during processing")
     except OSError:
-        logger.exception(
-            f"IOError processing mask {mask_path} or saving to {alpha_mask_path}"
-        )
+        logger.exception(f"IOError processing mask {mask_path} or saving to {alpha_mask_path}")
         raise MaskProcessingError("IO error during mask processing")
     except Exception:  # Catch other PIL errors
         logger.exception(f"Unexpected error creating alpha mask from {mask_path}")
@@ -472,9 +435,7 @@ class AudioProcessingError(Exception):
     """Raised when there's an error processing audio files."""
 
 
-def convert_audio_to_waveform_video(
-    audio_file: str | Path, video_file: str | Path
-) -> Path:
+def convert_audio_to_waveform_video(audio_file: str | Path, video_file: str | Path) -> Path:
     """
     Converts an audio file to a video visualization of the waveform.
 
@@ -501,9 +462,7 @@ def convert_audio_to_waveform_video(
         # Get the raw audio data and convert to numpy array
         # This works for mono or stereo by averaging channels
         audio_channels = audio.split_to_mono()
-        samples = np.array(
-            [channel.get_array_of_samples() for channel in audio_channels]
-        )
+        samples = np.array([channel.get_array_of_samples() for channel in audio_channels])
         samples = np.mean(samples, axis=0)
 
         # Parameters for the video
@@ -529,9 +488,7 @@ def convert_audio_to_waveform_video(
             # Calculate the start and end samples for this frame
             sample_rate = len(samples) / duration
             start_sample = int(max(0, time_point * sample_rate - sample_rate / fps * 2))
-            end_sample = int(
-                min(len(samples), time_point * sample_rate + sample_rate / fps * 3)
-            )
+            end_sample = int(min(len(samples), time_point * sample_rate + sample_rate / fps * 3))
 
             if start_sample >= end_sample or end_sample <= 0:
                 return frame  # Return empty frame if no samples to display
@@ -584,9 +541,7 @@ def convert_audio_to_waveform_video(
             frames.append(frame)
 
         if not frames:
-            logger.error(
-                "No frames generated for video. Audio might be too short or empty."
-            )
+            logger.error("No frames generated for video. Audio might be too short or empty.")
             raise AudioProcessingError("Video frame generation failed")
 
         moviepy_audio_clip: AudioFileClip = AudioFileClip(str(audio_file_path))
@@ -613,6 +568,7 @@ def convert_audio_to_waveform_video(
 
 
 # --- Obscast-specific Utility Functions ---
+
 
 def format_duration(seconds: float | None) -> str:
     """Formats a duration in seconds into a human-readable HH:MM:SS string."""
@@ -656,5 +612,3 @@ def create_error_embed(message: str, title: str = "❌ An Error Occurred") -> di
 def create_success_embed(message: str, title: str = "✅ Success") -> discord.Embed:
     """Creates a standardized success embed."""
     return discord.Embed(title=title, description=message, color=SUCCESS_COLOR)
-
-
