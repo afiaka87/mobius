@@ -22,7 +22,6 @@ dependencies = [
     "anthropic>=0.42.0",
     "discord-py>=2.4.0",
     "fal-client>=0.5.6",
-    "fastapi>=0.104.0",
     "moviepy==1.0.3", # Consider if specific version is strictly needed or if >= is okay
     "nest-asyncio>=1.6.0",
     "openai>=1.60.0",
@@ -36,7 +35,6 @@ dependencies = [
     "comfy-api-simplified", # Added based on usage in services.py (ensure version if critical)
     "Pillow>=10.0.0", # For PIL.Image, used in services.py and utils.py
     "psutil>=7.0.0",
-    "uvicorn>=0.24.0",
     "pytest>=8.3.5",
     "thefuzz[speedup]>=0.22.1", # Added for media search fuzzy matching
     "mypy>=1.15.0",
@@ -68,7 +66,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["bot", "commands", "services", "utils", "autocomplete", "views", "test_api"]
+py-modules = ["bot", "commands", "services", "utils", "autocomplete", "views"]
 
 [tool.ruff]
 line-length = 120
