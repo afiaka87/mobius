@@ -131,7 +131,8 @@ MODEL_CHOICES: Final[dict[str, list[ModelChoiceValue]]] = {
         "1024x1536",  # GPT Image supported sizes
     ],
     "gptimg_quality": ["auto", "low", "medium", "high"],  # GPT Image quality options
-    "sd_schedulers": ["DDIM", "Euler", "Euler A", "Heun", "DPM++ 2M", "DPM++ 3M", "DPM++ SDE"],  # Stable Diffusion schedulers
+    # Stable Diffusion schedulers
+    "sd_schedulers": ["DDIM", "Euler", "Euler A", "Heun", "DPM++ 2M", "DPM++ 3M", "DPM++ SDE"],
 }
 
 # Type aliases for specific string literals used in choices
@@ -171,7 +172,7 @@ async def help_command(interaction: discord.Interaction) -> None:
 `/google` - Search the web (Google Custom Search)
 `/temp` - Get current temperature in Fayetteville, AR
 
-**ℹ️ Help**
+**Info**
 `/help` - Show this help message"""
 
     await interaction.response.send_message(help_message, ephemeral=True)
@@ -814,7 +815,8 @@ async def kandinsky5_command(
         await interaction.edit_original_response(
             content=f"🎬 Generating video with Kandinsky-5...\n"
             f"**Prompt:** {discord.utils.escape_markdown(prompt[:100])}\n"
-            f"**Resolution:** {width}x{height} | **Duration:** {duration}s | **Steps:** {num_steps}{guidance_info}{seed_info}\n"
+            f"**Resolution:** {width}x{height} | **Duration:** {duration}s | "
+            f"**Steps:** {num_steps}{guidance_info}{seed_info}\n"
             f"⏳ Submitting task... (ETA: ~{eta_display})"
         )
 
@@ -848,7 +850,8 @@ async def kandinsky5_command(
             updated_content = (
                 f"{status_emoji} **{status_text}** video with Kandinsky-5\n"
                 f"**Prompt:** {discord.utils.escape_markdown(prompt[:100])}\n"
-                f"**Resolution:** {width}x{height} | **Duration:** {duration}s | **Steps:** {num_steps}{guidance_info}{seed_info}\n"
+                f"**Resolution:** {width}x{height} | **Duration:** {duration}s | "
+                f"**Steps:** {num_steps}{guidance_info}{seed_info}\n"
                 f"{time_display}{message_str}"
             )
 
@@ -925,7 +928,7 @@ async def kandinsky5_command(
             await interaction.edit_original_response(content=final_message, attachments=[discord_file])
         except discord.HTTPException as e:
             if e.code == 50027:  # Invalid Webhook Token (interaction expired)
-                logger.info(f"kandinsky5: Interaction expired, sending to channel instead")
+                logger.info("kandinsky5: Interaction expired, sending to channel instead")
                 # Send to the channel where the command was invoked
                 channel = interaction.channel
                 if channel is not None and hasattr(channel, "send"):
@@ -1053,19 +1056,13 @@ async def sd_command(
 
     except ValueError as ve:
         logger.exception(f"sd: Validation error - {ve}")
-        await interaction.edit_original_response(
-            content=f"❌ **Invalid parameters:** {ve}"
-        )
+        await interaction.edit_original_response(content=f"❌ **Invalid parameters:** {ve}")
     except RuntimeError as re:
         logger.exception(f"sd: Runtime error - {re}")
-        await interaction.edit_original_response(
-            content=f"❌ **Error generating image:** {re}"
-        )
+        await interaction.edit_original_response(content=f"❌ **Error generating image:** {re}")
     except Exception as e:
         logger.exception(f"sd: Unexpected error: {e}")
-        await interaction.edit_original_response(
-            content=f"❌ **An unexpected error occurred:** {e!s}"
-        )
+        await interaction.edit_original_response(content=f"❌ **An unexpected error occurred:** {e!s}")
 
 
 @app_commands.command(name="sd-load", description="Load a Stable Diffusion checkpoint")
@@ -1298,9 +1295,7 @@ async def flux2_command(
         nsfw_flags = result.get("has_nsfw_concepts", [])
 
         if not images:
-            await interaction.edit_original_response(
-                content="❌ **Error:** No images returned from FLUX.2 API"
-            )
+            await interaction.edit_original_response(content="❌ **Error:** No images returned from FLUX.2 API")
             return
 
         # Download images and create Discord files
@@ -1335,7 +1330,8 @@ async def flux2_command(
         # Show expanded prompt if it was used
         prompt_info = f"**Prompt:** {prompt}"
         if expand_prompt and used_prompt != prompt:
-            prompt_info = f"**Original Prompt:** {prompt}\n**Expanded:** {used_prompt[:200]}{'...' if len(used_prompt) > 200 else ''}"
+            truncated = used_prompt[:200] + ("..." if len(used_prompt) > 200 else "")
+            prompt_info = f"**Original Prompt:** {prompt}\n**Expanded:** {truncated}"
 
         # Send the result
         result_message = (
@@ -1352,11 +1348,7 @@ async def flux2_command(
 
     except RuntimeError as re:
         logger.exception(f"flux2: Runtime error - {re}")
-        await interaction.edit_original_response(
-            content=f"❌ **Error generating image:** {re}"
-        )
+        await interaction.edit_original_response(content=f"❌ **Error generating image:** {re}")
     except Exception as e:
         logger.exception(f"flux2: Unexpected error: {e}")
-        await interaction.edit_original_response(
-            content=f"❌ **An unexpected error occurred:** {e!s}"
-        )
+        await interaction.edit_original_response(content=f"❌ **An unexpected error occurred:** {e!s}")
