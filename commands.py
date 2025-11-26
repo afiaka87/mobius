@@ -933,7 +933,9 @@ async def kandinsky5_command(
             if e.code == 50027:  # Invalid Webhook Token (interaction expired)
                 logger.info(f"kandinsky5: Interaction expired, sending to channel instead")
                 # Send to the channel where the command was invoked
-                await interaction.channel.send(content=final_message, file=discord_file)
+                channel = interaction.channel
+                if channel is not None and hasattr(channel, "send"):
+                    await channel.send(content=final_message, file=discord_file)  # type: ignore[union-attr]
             else:
                 raise
 
