@@ -7,9 +7,10 @@ where an API returns a task ID immediately and the client polls for completion.
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, TypeVar
 
 import httpx
 
@@ -57,7 +58,7 @@ class AsyncTaskPoller:
         poll_interval: float = 15.0,
         max_poll_duration: float = 3600.0,
         http_timeout: float = 30.0,
-    ):
+    ) -> None:
         """
         Initialize the task poller.
 
@@ -105,9 +106,7 @@ class AsyncTaskPoller:
             while True:
                 elapsed = asyncio.get_event_loop().time() - start_time
                 if elapsed > self.max_poll_duration:
-                    raise TaskPollingError(
-                        f"Task {task_id} polling timed out after {elapsed:.1f}s"
-                    )
+                    raise TaskPollingError(f"Task {task_id} polling timed out after {elapsed:.1f}s")
 
                 poll_count += 1
 
@@ -121,8 +120,7 @@ class AsyncTaskPoller:
                     progress = self._parse_progress(data)
 
                     logger.debug(
-                        f"Task {task_id} poll #{poll_count}: {progress.status.value} "
-                        f"(elapsed: {elapsed:.1f}s)"
+                        f"Task {task_id} poll #{poll_count}: {progress.status.value} (elapsed: {elapsed:.1f}s)"
                     )
 
                     # Send progress update
@@ -131,16 +129,15 @@ class AsyncTaskPoller:
 
                     # Check if complete
                     if progress.status == TaskStatus.COMPLETED:
-                        logger.info(
-                            f"Task {task_id} completed after {elapsed:.1f}s "
-                            f"({poll_count} polls)"
-                        )
+                        logger.info(f"Task {task_id} completed after {elapsed:.1f}s ({poll_count} polls)")
                         # Fetch result if separate endpoint
                         if result_url and result_url != status_url:
                             result_response = await client.get(result_url)
                             result_response.raise_for_status()
-                            return result_response.json()
-                        return data
+                            result_json: dict[str, Any] = result_response.json()
+                            return result_json
+                        data_typed: dict[str, Any] = data
+                        return data_typed
 
                     # Check if failed
                     if progress.status == TaskStatus.FAILED:
@@ -152,15 +149,10 @@ class AsyncTaskPoller:
                     await asyncio.sleep(self.poll_interval)
 
                 except httpx.HTTPStatusError as e:
-                    logger.error(
-                        f"HTTP error polling task {task_id}: "
-                        f"{e.response.status_code} - {e.response.text}"
-                    )
-                    raise TaskPollingError(
-                        f"HTTP {e.response.status_code}: {e.response.text}"
-                    )
+                    logger.exception(f"HTTP error polling task {task_id}: {e.response.status_code} - {e.response.text}")
+                    raise TaskPollingError(f"HTTP {e.response.status_code}: {e.response.text}")
                 except httpx.ConnectError as e:
-                    logger.error(f"Connection error polling task {task_id}: {e}")
+                    logger.exception(f"Connection error polling task {task_id}: {e}")
                     raise TaskPollingError(f"Cannot connect to API: {e}")
                 except Exception as e:
                     logger.exception(f"Unexpected error polling task {task_id}")
