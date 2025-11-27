@@ -41,10 +41,13 @@ CHANNEL_ID = 1375319100124827748
 CF_API_URL = f"https://customer-{CUSTOMER_CODE}.cloudflarestream.com/{LIVE_INPUT_ID}/lifecycle"
 
 # Polling interval (seconds)
-POLL_INTERVAL = 5
+POLL_INTERVAL = 3
 
 # Health check interval (log "still alive" every N polls)
-HEALTH_CHECK_INTERVAL = 720  # Every hour at 5s intervals
+HEALTH_CHECK_INTERVAL = 1200  # Every hour at 3s intervals
+
+# Require N consecutive "live" readings before sending notification
+CONFIRMATION_POLLS = 2
 
 
 class StreamMonitor(discord.Client):
@@ -63,6 +66,7 @@ class StreamMonitor(discord.Client):
         self.session: aiohttp.ClientSession | None = None
         self.poll_count = 0
         self.consecutive_failures = 0
+        self.consecutive_live_count = 0  # For confirmation polling
 
     async def setup_hook(self) -> None:
         """Called when the client is starting up."""
@@ -99,7 +103,16 @@ class StreamMonitor(discord.Client):
 
         logger.info(f"Monitoring channel: {self.stream_channel.name} in {self.stream_channel.guild.name}")
         logger.info(f"Admin user: {self.admin.display_name}")
-        logger.info(f"Polling every {POLL_INTERVAL} seconds")
+        logger.info(f"Polling every {POLL_INTERVAL} seconds (confirmation: {CONFIRMATION_POLLS} polls)")
+
+        # Check initial stream state before starting monitor loop
+        initial_status = await self.check_stream_status()
+        if initial_status is not None:
+            self.is_live = initial_status
+            status_str = "LIVE" if initial_status else "OFFLINE"
+            logger.info(f"Initial stream state: {status_str}")
+        else:
+            logger.warning("Could not determine initial stream state, assuming OFFLINE")
 
         # Start the monitoring task if not already running
         if not self.monitor_task.is_running():
@@ -118,8 +131,12 @@ class StreamMonitor(discord.Client):
                 self.admin = guild.get_member(self.mention_user_id)
                 break
 
-    async def check_stream_status(self) -> bool | None:
-        """Poll Cloudflare API to check if stream is live (async, non-blocking)."""
+    async def check_stream_status(self, retry: bool = True) -> bool | None:
+        """Poll Cloudflare API to check if stream is live (async, non-blocking).
+
+        Args:
+            retry: If True, retry once on failure before giving up.
+        """
         if not self.session:
             logger.error("HTTP session not initialized")
             return None
@@ -133,9 +150,20 @@ class StreamMonitor(discord.Client):
                 self.consecutive_failures = 0  # Reset on success
                 return data.get("live", False)
 
-        except aiohttp.ClientError:
+        except aiohttp.ClientError as e:
+            # Extract HTTP status if available
+            status_info = ""
+            if hasattr(e, "status"):
+                status_info = f" (HTTP {e.status})"
+
+            # Retry once before counting as failure
+            if retry:
+                logger.warning(f"API request failed{status_info}, retrying...")
+                await asyncio.sleep(0.5)
+                return await self.check_stream_status(retry=False)
+
             self.consecutive_failures += 1
-            logger.exception(f"Error checking stream status (failure #{self.consecutive_failures})")
+            logger.exception(f"Error checking stream status{status_info} (failure #{self.consecutive_failures})")
             if self.consecutive_failures >= 10:
                 logger.warning("10 consecutive API failures - stream status unknown!")
             return None
@@ -165,22 +193,39 @@ class StreamMonitor(discord.Client):
 
         current_status = await self.check_stream_status()
 
-        if current_status is not None:
-            # Detect offline -> live transition
-            if current_status and not self.is_live:
-                logger.info("Stream went LIVE! Sending notification...")
+        if current_status is None:
+            # API failure - reset confirmation counter
+            self.consecutive_live_count = 0
+            return
+
+        if current_status and not self.is_live:
+            # Stream appears to be live - increment confirmation counter
+            self.consecutive_live_count += 1
+
+            if self.consecutive_live_count < CONFIRMATION_POLLS:
+                # Still waiting for confirmation
+                logger.info(f"Stream live detected ({self.consecutive_live_count}/{CONFIRMATION_POLLS} confirmations)")
+            else:
+                # Confirmed live! Send notification
+                logger.info(f"Stream confirmed LIVE after {CONFIRMATION_POLLS} polls! Sending notification...")
                 await self.send_live_notification()
                 self.is_live = True
+                self.consecutive_live_count = 0
 
-            # Detect live -> offline transition (silent)
-            elif not current_status and self.is_live:
-                logger.info("Stream went offline (no notification sent)")
-                self.is_live = False
+        elif not current_status and self.is_live:
+            # Stream went offline
+            logger.info("Stream went offline (no notification sent)")
+            self.is_live = False
+            self.consecutive_live_count = 0
 
-            # Debug logging
-            if logger.isEnabledFor(logging.DEBUG):
-                status_str = "LIVE" if current_status else "OFFLINE"
-                logger.debug(f"Stream status: {status_str}")
+        elif not current_status:
+            # Still offline - reset any partial confirmation
+            self.consecutive_live_count = 0
+
+        # Debug logging
+        if logger.isEnabledFor(logging.DEBUG):
+            status_str = "LIVE" if current_status else "OFFLINE"
+            logger.debug(f"Stream status: {status_str}")
 
     @monitor_task.before_loop
     async def before_monitor(self) -> None:
@@ -207,8 +252,15 @@ async def main() -> None:
 
     mention_user_id = int(DISCORD_MENTION_USER_ID)
 
+    logger.info("=" * 50)
     logger.info("Starting Stream Status Monitor")
-    logger.info(f"Monitoring stream: {LIVE_INPUT_ID}")
+    logger.info("=" * 50)
+    logger.info(f"Stream ID: {LIVE_INPUT_ID}")
+    logger.info(f"Poll interval: {POLL_INTERVAL}s")
+    logger.info(f"Confirmation polls required: {CONFIRMATION_POLLS}")
+    health_minutes = HEALTH_CHECK_INTERVAL * POLL_INTERVAL // 60
+    logger.info(f"Health check interval: {HEALTH_CHECK_INTERVAL} polls (~{health_minutes} min)")
+    logger.info("=" * 50)
 
     monitor = StreamMonitor(mention_user_id)
     try:
