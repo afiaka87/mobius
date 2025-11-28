@@ -106,13 +106,14 @@ class StreamMonitor(discord.Client):
         logger.info(f"Polling every {POLL_INTERVAL} seconds (confirmation: {CONFIRMATION_POLLS} polls)")
 
         # Check initial stream state before starting monitor loop
+        # Always start assuming OFFLINE so we can detect the live transition
         initial_status = await self.check_stream_status()
         if initial_status is not None:
-            self.is_live = initial_status
             status_str = "LIVE" if initial_status else "OFFLINE"
-            logger.info(f"Initial stream state: {status_str}")
+            logger.info(f"Initial stream state: {status_str} (will notify on next live transition)")
         else:
-            logger.warning("Could not determine initial stream state, assuming OFFLINE")
+            logger.warning("Could not determine initial stream state")
+        # self.is_live stays False - we only flip it when we detect a transition
 
         # Start the monitoring task if not already running
         if not self.monitor_task.is_running():
