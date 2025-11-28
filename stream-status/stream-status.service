@@ -1,0 +1,37 @@
+# Stream Status Monitor - systemd user service
+#
+# Installation:
+#   1. Copy this file to ~/.config/systemd/user/stream-status.service
+#   2. Edit the paths below to match your setup
+#   3. Reload systemd: systemctl --user daemon-reload
+#   4. Enable the service: systemctl --user enable stream-status
+#   5. Start the service: systemctl --user start stream-status
+#
+# Commands:
+#   systemctl --user status stream-status   # Check status
+#   systemctl --user restart stream-status  # Restart
+#   journalctl --user -u stream-status -f   # View logs
+
+[Unit]
+Description=Stream Status Discord Notification Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# TODO: Update this path to your stream-status directory
+WorkingDirectory=/path/to/stream-status
+# TODO: Update this path to your uv binary (run `which uv` to find it)
+ExecStart=/path/to/uv run python send_status.py
+Restart=always
+RestartSec=10
+
+# Environment file for secrets (optional - if not using .env in WorkingDirectory)
+# EnvironmentFile=%h/.config/stream-status/env
+
+# Ensure the service stays running
+WatchdogSec=300
+WatchdogSignal=SIGKILL
+
+[Install]
+WantedBy=default.target
