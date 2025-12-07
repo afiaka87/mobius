@@ -750,6 +750,7 @@ else:
 
 K5_API_URL = "http://100.105.155.18:8888"
 SD_API_URL = "http://100.70.95.57:8889"
+ZIMAGE_API_URL = "https://archest.tailfd5df.ts.net"
 
 
 # --- Kandinsky-5 Video Generation Services ---
@@ -1415,3 +1416,72 @@ async def generate_flux2_image(
     except Exception as e:
         logger.exception(f"FLUX 2 API error: {e}")
         raise RuntimeError(f"FLUX 2 generation failed: {e!s}")
+
+
+# --- Z-Image-Turbo Image Generation ---
+
+
+async def generate_zimage(
+    prompt: str,
+    width: int = 1024,
+    height: int = 1024,
+    num_inference_steps: int = 9,
+    seed: int = 42,
+) -> Path:
+    """
+    Generate an image using the Z-Image-Turbo API.
+
+    Args:
+        prompt: Text description of the image to generate
+        width: Image width in pixels (default: 1024)
+        height: Image height in pixels (default: 1024)
+        num_inference_steps: Number of denoising steps (default: 9)
+        seed: Random seed for reproducibility (default: 42)
+
+    Returns:
+        Path to the saved PNG image file
+
+    Raises:
+        RuntimeError: If API call fails or returns invalid data
+    """
+    logger.info(
+        f"Z-Image: Generating image with prompt='{prompt[:50]}...', "
+        f"size={width}x{height}, steps={num_inference_steps}, seed={seed}"
+    )
+
+    params = {
+        "prompt": prompt,
+        "width": width,
+        "height": height,
+        "num_inference_steps": num_inference_steps,
+        "seed": seed,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.get(f"{ZIMAGE_API_URL}/generate", params=params)
+            response.raise_for_status()
+
+        # API returns PNG directly, save to cache
+        cache_dir: Path = Path(".cache/zimage_generated")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        safe_prompt = "".join(c if c.isalnum() else "_" for c in prompt[:30])
+        filename = f"zimage_{safe_prompt}_{seed}.png"
+        file_path = cache_dir / filename
+
+        with open(file_path, "wb") as f:
+            f.write(response.content)
+
+        logger.info(f"Z-Image: Image saved to {file_path}")
+        return file_path
+
+    except httpx.ConnectError:
+        logger.exception(f"Cannot connect to Z-Image API at {ZIMAGE_API_URL}")
+        raise RuntimeError(f"Cannot connect to Z-Image API at {ZIMAGE_API_URL}. Please check if it's running.")
+    except httpx.HTTPStatusError as e:
+        logger.exception(f"Z-Image API HTTP error: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"Z-Image API error: {e.response.status_code} - {e.response.text}")
+    except Exception as e:
+        logger.exception(f"Error generating Z-Image: {e}")
+        raise RuntimeError(f"Failed to generate Z-Image: {e!s}")
