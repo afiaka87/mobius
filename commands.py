@@ -108,6 +108,7 @@ COMMANDS_INFO: Final[dict[str, str]] = {
     "sd": "Generate images using Stable Diffusion 1.5 model.",
     "sd-load": "Load a Stable Diffusion checkpoint.",
     "sd-list": "List available Stable Diffusion checkpoints.",
+    "z": "Generate an image using Z-Image-Turbo.",
 }
 
 # Type alias for model choice values
@@ -171,6 +172,9 @@ async def help_command(interaction: discord.Interaction) -> None:
 `/youtube` - Search YouTube (returns top result)
 `/google` - Search the web (Google Custom Search)
 `/temp` - Get current temperature in Fayetteville, AR
+
+**🖼️ Local Models**
+`/z` - Generate image (Z-Image-Turbo)
 
 **Info**
 `/help` - Show this help message"""
@@ -1352,3 +1356,53 @@ async def flux2_command(
     except Exception as e:
         logger.exception(f"flux2: Unexpected error: {e}")
         await interaction.edit_original_response(content=f"❌ **An unexpected error occurred:** {e!s}")
+
+
+# --- Z-Image-Turbo Command ---
+
+
+@app_commands.command(name="z", description="Generate an image using Z-Image-Turbo")
+@app_commands.describe(
+    prompt="Text description of the image to generate",
+    width="Image width in pixels (default: 1024)",
+    height="Image height in pixels (default: 1024)",
+    num_inference_steps="Number of denoising steps (default: 9)",
+    seed="Random seed for reproducibility (default: 42)",
+)
+async def z_command(
+    interaction: discord.Interaction,
+    prompt: str,
+    width: int = 1024,
+    height: int = 1024,
+    num_inference_steps: app_commands.Range[int, 1, 100] = 9,
+    seed: int = 42,
+) -> None:
+    """Generate an image using Z-Image-Turbo."""
+    await interaction.response.defer(thinking=True)
+
+    logger.info(
+        f"z: User {interaction.user} requested image: "
+        f"prompt='{prompt[:50]}...', size={width}x{height}, steps={num_inference_steps}, seed={seed}"
+    )
+
+    try:
+        image_path = await services.generate_zimage(
+            prompt=prompt,
+            width=width,
+            height=height,
+            num_inference_steps=num_inference_steps,
+            seed=seed,
+        )
+
+        discord_file = discord.File(image_path, filename=image_path.name)
+        result_content = (
+            f"**Prompt:** {prompt}\n"
+            f"**Size:** {width}x{height} | **Steps:** {num_inference_steps} | **Seed:** {seed}"
+        )
+        await interaction.followup.send(content=result_content, file=discord_file)
+    except RuntimeError as re:
+        logger.exception(f"z: Runtime error - {re}")
+        await interaction.followup.send(f"❌ Error: {re}", ephemeral=True)
+    except Exception as e:
+        logger.exception(f"z: Unexpected error - {e}")
+        await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}", ephemeral=True)
