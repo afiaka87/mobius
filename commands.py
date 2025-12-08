@@ -1368,6 +1368,8 @@ async def flux2_command(
     height="Image height in pixels (default: 1024)",
     num_inference_steps="Number of denoising steps (default: 9)",
     seed="Random seed for reproducibility (default: 42)",
+    use_oot_lora="Enable the OOT64 LoRA adapter (default: False)",
+    oot_lora_scale="LoRA weight/scale 0.0-2.0 (default: 0.8)",
 )
 async def z_command(
     interaction: discord.Interaction,
@@ -1376,13 +1378,16 @@ async def z_command(
     height: int = 1024,
     num_inference_steps: app_commands.Range[int, 1, 100] = 9,
     seed: int = 42,
+    use_oot_lora: bool = False,
+    oot_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
 ) -> None:
     """Generate an image using Z-Image-Turbo."""
     await interaction.response.defer(thinking=True)
 
+    lora_info = f", lora={use_oot_lora}, lora_scale={oot_lora_scale}" if use_oot_lora else ""
     logger.info(
         f"z: User {interaction.user} requested image: "
-        f"prompt='{prompt[:50]}...', size={width}x{height}, steps={num_inference_steps}, seed={seed}"
+        f"prompt='{prompt[:50]}...', size={width}x{height}, steps={num_inference_steps}, seed={seed}{lora_info}"
     )
 
     try:
@@ -1392,12 +1397,15 @@ async def z_command(
             height=height,
             num_inference_steps=num_inference_steps,
             seed=seed,
+            use_oot_lora=use_oot_lora,
+            oot_lora_scale=oot_lora_scale,
         )
 
+        lora_display = f" | **LoRA:** {oot_lora_scale}" if use_oot_lora else ""
         discord_file = discord.File(image_path, filename=image_path.name)
         result_content = (
             f"**Prompt:** {prompt}\n"
-            f"**Size:** {width}x{height} | **Steps:** {num_inference_steps} | **Seed:** {seed}"
+            f"**Size:** {width}x{height} | **Steps:** {num_inference_steps} | **Seed:** {seed}{lora_display}"
         )
         await interaction.followup.send(content=result_content, file=discord_file)
     except RuntimeError as re:
