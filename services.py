@@ -1427,6 +1427,8 @@ async def generate_zimage(
     height: int = 1024,
     num_inference_steps: int = 9,
     seed: int = 42,
+    use_oot_lora: bool = False,
+    oot_lora_scale: float = 0.8,
 ) -> Path:
     """
     Generate an image using the Z-Image-Turbo API.
@@ -1437,6 +1439,8 @@ async def generate_zimage(
         height: Image height in pixels (default: 1024)
         num_inference_steps: Number of denoising steps (default: 9)
         seed: Random seed for reproducibility (default: 42)
+        use_oot_lora: Enable the OOT64 LoRA adapter (default: False)
+        oot_lora_scale: LoRA weight/scale 0.0-2.0 (default: 0.8)
 
     Returns:
         Path to the saved PNG image file
@@ -1444,9 +1448,10 @@ async def generate_zimage(
     Raises:
         RuntimeError: If API call fails or returns invalid data
     """
+    lora_info = f", lora={use_oot_lora}, lora_scale={oot_lora_scale}" if use_oot_lora else ""
     logger.info(
         f"Z-Image: Generating image with prompt='{prompt[:50]}...', "
-        f"size={width}x{height}, steps={num_inference_steps}, seed={seed}"
+        f"size={width}x{height}, steps={num_inference_steps}, seed={seed}{lora_info}"
     )
 
     params = {
@@ -1455,6 +1460,8 @@ async def generate_zimage(
         "height": height,
         "num_inference_steps": num_inference_steps,
         "seed": seed,
+        "use_oot_lora": use_oot_lora,
+        "oot_lora_weight": oot_lora_scale,
     }
 
     try:
