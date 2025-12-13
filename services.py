@@ -1429,6 +1429,8 @@ async def generate_zimage(
     seed: int = 42,
     use_oot_lora: bool = False,
     oot_lora_scale: float = 0.8,
+    use_hk_lora: bool = False,
+    hk_lora_scale: float = 0.8,
 ) -> Path:
     """
     Generate an image using the Z-Image-Turbo API.
@@ -1440,7 +1442,9 @@ async def generate_zimage(
         num_inference_steps: Number of denoising steps (default: 9)
         seed: Random seed for reproducibility (default: 42)
         use_oot_lora: Enable the OOT64 LoRA adapter (default: False)
-        oot_lora_scale: LoRA weight/scale 0.0-2.0 (default: 0.8)
+        oot_lora_scale: OOT64 LoRA weight/scale 0.0-2.0 (default: 0.8)
+        use_hk_lora: Enable the HK (Hollow Knight) LoRA adapter (default: False)
+        hk_lora_scale: HK LoRA weight/scale 0.0-2.0 (default: 0.8)
 
     Returns:
         Path to the saved PNG image file
@@ -1448,7 +1452,12 @@ async def generate_zimage(
     Raises:
         RuntimeError: If API call fails or returns invalid data
     """
-    lora_info = f", lora={use_oot_lora}, lora_scale={oot_lora_scale}" if use_oot_lora else ""
+    lora_parts = []
+    if use_oot_lora:
+        lora_parts.append(f"oot={oot_lora_scale}")
+    if use_hk_lora:
+        lora_parts.append(f"hk={hk_lora_scale}")
+    lora_info = f", lora=[{', '.join(lora_parts)}]" if lora_parts else ""
     logger.info(
         f"Z-Image: Generating image with prompt='{prompt[:50]}...', "
         f"size={width}x{height}, steps={num_inference_steps}, seed={seed}{lora_info}"
@@ -1462,6 +1471,8 @@ async def generate_zimage(
         "seed": seed,
         "use_oot_lora": use_oot_lora,
         "oot_lora_weight": oot_lora_scale,
+        "use_hk_lora": use_hk_lora,
+        "hk_lora_weight": hk_lora_scale,
     }
 
     try:
