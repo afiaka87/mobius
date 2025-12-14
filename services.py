@@ -1431,6 +1431,8 @@ async def generate_zimage(
     oot_lora_scale: float = 0.8,
     use_hk_lora: bool = False,
     hk_lora_scale: float = 0.8,
+    use_mannequin_lora: bool = False,
+    mannequin_lora_scale: float = 0.8,
 ) -> Path:
     """
     Generate an image using the Z-Image-Turbo API.
@@ -1445,6 +1447,8 @@ async def generate_zimage(
         oot_lora_scale: OOT64 LoRA weight/scale 0.0-2.0 (default: 0.8)
         use_hk_lora: Enable the HK (Hollow Knight) LoRA adapter (default: False)
         hk_lora_scale: HK LoRA weight/scale 0.0-2.0 (default: 0.8)
+        use_mannequin_lora: Enable the Mannequin LoRA adapter (default: False)
+        mannequin_lora_scale: Mannequin LoRA weight/scale 0.0-2.0 (default: 0.8)
 
     Returns:
         Path to the saved PNG image file
@@ -1457,6 +1461,8 @@ async def generate_zimage(
         lora_parts.append(f"oot={oot_lora_scale}")
     if use_hk_lora:
         lora_parts.append(f"hk={hk_lora_scale}")
+    if use_mannequin_lora:
+        lora_parts.append(f"mannequin={mannequin_lora_scale}")
     lora_info = f", lora=[{', '.join(lora_parts)}]" if lora_parts else ""
     logger.info(
         f"Z-Image: Generating image with prompt='{prompt[:50]}...', "
@@ -1473,6 +1479,8 @@ async def generate_zimage(
         "oot_lora_weight": oot_lora_scale,
         "use_hk_lora": use_hk_lora,
         "hk_lora_weight": hk_lora_scale,
+        "use_mannequin_lora": use_mannequin_lora,
+        "mannequin_lora_weight": mannequin_lora_scale,
     }
 
     try:
