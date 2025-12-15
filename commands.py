@@ -1374,6 +1374,8 @@ async def flux2_command(
     hk_lora_scale="HK LoRA weight/scale 0.0-2.0 (default: 0.8)",
     use_mannequin_lora="Enable the Mannequin LoRA adapter (default: False)",
     mannequin_lora_scale="Mannequin LoRA weight/scale 0.0-2.0 (default: 0.8)",
+    use_tlou2_lora="Enable the TLOU2 LoRA adapter (default: False)",
+    tlou2_lora_scale="TLOU2 LoRA weight/scale 0.0-2.0 (default: 0.8)",
 )
 async def z_command(
     interaction: discord.Interaction,
@@ -1388,6 +1390,8 @@ async def z_command(
     hk_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
     use_mannequin_lora: bool = False,
     mannequin_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
+    use_tlou2_lora: bool = False,
+    tlou2_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
 ) -> None:
     """Generate an image using Z-Image-Turbo."""
     await interaction.response.defer(thinking=True)
@@ -1399,6 +1403,8 @@ async def z_command(
         lora_parts.append(f"hk={hk_lora_scale}")
     if use_mannequin_lora:
         lora_parts.append(f"mannequin={mannequin_lora_scale}")
+    if use_tlou2_lora:
+        lora_parts.append(f"tlou2={tlou2_lora_scale}")
     lora_info = f", lora=[{', '.join(lora_parts)}]" if lora_parts else ""
     logger.info(
         f"z: User {interaction.user} requested image: "
@@ -1418,6 +1424,8 @@ async def z_command(
             hk_lora_scale=hk_lora_scale,
             use_mannequin_lora=use_mannequin_lora,
             mannequin_lora_scale=mannequin_lora_scale,
+            use_tlou2_lora=use_tlou2_lora,
+            tlou2_lora_scale=tlou2_lora_scale,
         )
 
         # Build LoRA display string
@@ -1428,6 +1436,8 @@ async def z_command(
             lora_displays.append(f"HK: {hk_lora_scale}")
         if use_mannequin_lora:
             lora_displays.append(f"Mannequin: {mannequin_lora_scale}")
+        if use_tlou2_lora:
+            lora_displays.append(f"TLOU2: {tlou2_lora_scale}")
         lora_display = f" | **LoRA:** [{', '.join(lora_displays)}]" if lora_displays else ""
 
         discord_file = discord.File(image_path, filename=image_path.name)
