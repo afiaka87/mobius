@@ -1435,6 +1435,8 @@ async def generate_zimage(
     mannequin_lora_scale: float = 0.8,
     use_tlou2_lora: bool = False,
     tlou2_lora_scale: float = 0.8,
+    use_ffhq_lora: bool = False,
+    ffhq_lora_scale: float = 0.8,
 ) -> Path:
     """
     Generate an image using the Z-Image-Turbo API.
@@ -1453,6 +1455,8 @@ async def generate_zimage(
         mannequin_lora_scale: Mannequin LoRA weight/scale 0.0-2.0 (default: 0.8)
         use_tlou2_lora: Enable the TLOU2 LoRA adapter (default: False)
         tlou2_lora_scale: TLOU2 LoRA weight/scale 0.0-2.0 (default: 0.8)
+        use_ffhq_lora: Enable the FFHQ LoRA adapter (default: False)
+        ffhq_lora_scale: FFHQ LoRA weight/scale 0.0-2.0 (default: 0.8)
 
     Returns:
         Path to the saved PNG image file
@@ -1469,6 +1473,8 @@ async def generate_zimage(
         lora_parts.append(f"mannequin={mannequin_lora_scale}")
     if use_tlou2_lora:
         lora_parts.append(f"tlou2={tlou2_lora_scale}")
+    if use_ffhq_lora:
+        lora_parts.append(f"ffhq={ffhq_lora_scale}")
     lora_info = f", lora=[{', '.join(lora_parts)}]" if lora_parts else ""
     logger.info(
         f"Z-Image: Generating image with prompt='{prompt[:50]}...', "
@@ -1489,6 +1495,8 @@ async def generate_zimage(
         "mannequin_lora_weight": mannequin_lora_scale,
         "use_tlou2_lora": use_tlou2_lora,
         "tlou2_lora_weight": tlou2_lora_scale,
+        "use_ffhq_lora": use_ffhq_lora,
+        "ffhq_lora_weight": ffhq_lora_scale,
     }
 
     try:
