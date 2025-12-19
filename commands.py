@@ -1368,22 +1368,14 @@ async def flux2_command(
     height="Image height in pixels (default: 1024)",
     num_inference_steps="Number of denoising steps (default: 9)",
     seed="Random seed for reproducibility (default: 42)",
-    use_oot_lora="Enable the OOT64 LoRA adapter (default: False)",
-    oot_lora_scale="OOT64 LoRA weight/scale 0.0-2.0 (default: 0.8)",
-    use_hk_lora="Enable the HK (Hollow Knight) LoRA adapter (default: False)",
-    hk_lora_scale="HK LoRA weight/scale 0.0-2.0 (default: 0.8)",
-    use_mannequin_lora="Enable the Mannequin LoRA adapter (default: False)",
-    mannequin_lora_scale="Mannequin LoRA weight/scale 0.0-2.0 (default: 0.8)",
-    use_tlou2_lora="Enable the TLOU2 LoRA adapter (default: False)",
-    tlou2_lora_scale="TLOU2 LoRA weight/scale 0.0-2.0 (default: 0.8)",
-    use_ffhq_lora="Enable the FFHQ LoRA adapter (default: False)",
-    ffhq_lora_scale="FFHQ LoRA weight/scale 0.0-2.0 (default: 0.8)",
-    use_reboot_lora="Enable the ReBoot LoRA adapter (default: False)",
-    reboot_lora_scale="ReBoot LoRA weight/scale 0.0-2.0 (default: 0.8)",
-    use_sr_lora="Enable the SR LoRA adapter (default: False)",
-    sr_lora_scale="SR LoRA weight/scale 0.0-2.0 (default: 0.8)",
-    use_archer_lora="Enable the ARCHER LoRA adapter (default: False)",
-    archer_lora_scale="ARCHER LoRA weight/scale 0.0-2.0 (default: 0.8)",
+    oot="OOT64 LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
+    hk="HK LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
+    mannequin="Mannequin LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
+    tlou2="TLOU2 LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
+    ffhq="FFHQ LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
+    reboot="ReBoot LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
+    sr="SR LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
+    archer="ARCHER LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
 )
 async def z_command(
     interaction: discord.Interaction,
@@ -1392,43 +1384,35 @@ async def z_command(
     height: int = 1024,
     num_inference_steps: app_commands.Range[int, 1, 100] = 9,
     seed: int = 42,
-    use_oot_lora: bool = False,
-    oot_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
-    use_hk_lora: bool = False,
-    hk_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
-    use_mannequin_lora: bool = False,
-    mannequin_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
-    use_tlou2_lora: bool = False,
-    tlou2_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
-    use_ffhq_lora: bool = False,
-    ffhq_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
-    use_reboot_lora: bool = False,
-    reboot_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
-    use_sr_lora: bool = False,
-    sr_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
-    use_archer_lora: bool = False,
-    archer_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
+    oot: app_commands.Range[float, 0.0, 2.0] = 0.0,
+    hk: app_commands.Range[float, 0.0, 2.0] = 0.0,
+    mannequin: app_commands.Range[float, 0.0, 2.0] = 0.0,
+    tlou2: app_commands.Range[float, 0.0, 2.0] = 0.0,
+    ffhq: app_commands.Range[float, 0.0, 2.0] = 0.0,
+    reboot: app_commands.Range[float, 0.0, 2.0] = 0.0,
+    sr: app_commands.Range[float, 0.0, 2.0] = 0.0,
+    archer: app_commands.Range[float, 0.0, 2.0] = 0.0,
 ) -> None:
     """Generate an image using Z-Image-Turbo."""
     await interaction.response.defer(thinking=True)
 
     lora_parts = []
-    if use_oot_lora:
-        lora_parts.append(f"oot={oot_lora_scale}")
-    if use_hk_lora:
-        lora_parts.append(f"hk={hk_lora_scale}")
-    if use_mannequin_lora:
-        lora_parts.append(f"mannequin={mannequin_lora_scale}")
-    if use_tlou2_lora:
-        lora_parts.append(f"tlou2={tlou2_lora_scale}")
-    if use_ffhq_lora:
-        lora_parts.append(f"ffhq={ffhq_lora_scale}")
-    if use_reboot_lora:
-        lora_parts.append(f"reboot={reboot_lora_scale}")
-    if use_sr_lora:
-        lora_parts.append(f"sr={sr_lora_scale}")
-    if use_archer_lora:
-        lora_parts.append(f"archer={archer_lora_scale}")
+    if oot > 0.0:
+        lora_parts.append(f"oot={oot}")
+    if hk > 0.0:
+        lora_parts.append(f"hk={hk}")
+    if mannequin > 0.0:
+        lora_parts.append(f"mannequin={mannequin}")
+    if tlou2 > 0.0:
+        lora_parts.append(f"tlou2={tlou2}")
+    if ffhq > 0.0:
+        lora_parts.append(f"ffhq={ffhq}")
+    if reboot > 0.0:
+        lora_parts.append(f"reboot={reboot}")
+    if sr > 0.0:
+        lora_parts.append(f"sr={sr}")
+    if archer > 0.0:
+        lora_parts.append(f"archer={archer}")
     lora_info = f", lora=[{', '.join(lora_parts)}]" if lora_parts else ""
     logger.info(
         f"z: User {interaction.user} requested image: "
@@ -1442,42 +1426,42 @@ async def z_command(
             height=height,
             num_inference_steps=num_inference_steps,
             seed=seed,
-            use_oot_lora=use_oot_lora,
-            oot_lora_scale=oot_lora_scale,
-            use_hk_lora=use_hk_lora,
-            hk_lora_scale=hk_lora_scale,
-            use_mannequin_lora=use_mannequin_lora,
-            mannequin_lora_scale=mannequin_lora_scale,
-            use_tlou2_lora=use_tlou2_lora,
-            tlou2_lora_scale=tlou2_lora_scale,
-            use_ffhq_lora=use_ffhq_lora,
-            ffhq_lora_scale=ffhq_lora_scale,
-            use_reboot_lora=use_reboot_lora,
-            reboot_lora_scale=reboot_lora_scale,
-            use_sr_lora=use_sr_lora,
-            sr_lora_scale=sr_lora_scale,
-            use_archer_lora=use_archer_lora,
-            archer_lora_scale=archer_lora_scale,
+            use_oot_lora=oot > 0.0,
+            oot_lora_scale=oot,
+            use_hk_lora=hk > 0.0,
+            hk_lora_scale=hk,
+            use_mannequin_lora=mannequin > 0.0,
+            mannequin_lora_scale=mannequin,
+            use_tlou2_lora=tlou2 > 0.0,
+            tlou2_lora_scale=tlou2,
+            use_ffhq_lora=ffhq > 0.0,
+            ffhq_lora_scale=ffhq,
+            use_reboot_lora=reboot > 0.0,
+            reboot_lora_scale=reboot,
+            use_sr_lora=sr > 0.0,
+            sr_lora_scale=sr,
+            use_archer_lora=archer > 0.0,
+            archer_lora_scale=archer,
         )
 
         # Build LoRA display string
         lora_displays = []
-        if use_oot_lora:
-            lora_displays.append(f"OOT: {oot_lora_scale}")
-        if use_hk_lora:
-            lora_displays.append(f"HK: {hk_lora_scale}")
-        if use_mannequin_lora:
-            lora_displays.append(f"Mannequin: {mannequin_lora_scale}")
-        if use_tlou2_lora:
-            lora_displays.append(f"TLOU2: {tlou2_lora_scale}")
-        if use_ffhq_lora:
-            lora_displays.append(f"FFHQ: {ffhq_lora_scale}")
-        if use_reboot_lora:
-            lora_displays.append(f"ReBoot: {reboot_lora_scale}")
-        if use_sr_lora:
-            lora_displays.append(f"SR: {sr_lora_scale}")
-        if use_archer_lora:
-            lora_displays.append(f"ARCHER: {archer_lora_scale}")
+        if oot > 0.0:
+            lora_displays.append(f"OOT: {oot}")
+        if hk > 0.0:
+            lora_displays.append(f"HK: {hk}")
+        if mannequin > 0.0:
+            lora_displays.append(f"Mannequin: {mannequin}")
+        if tlou2 > 0.0:
+            lora_displays.append(f"TLOU2: {tlou2}")
+        if ffhq > 0.0:
+            lora_displays.append(f"FFHQ: {ffhq}")
+        if reboot > 0.0:
+            lora_displays.append(f"ReBoot: {reboot}")
+        if sr > 0.0:
+            lora_displays.append(f"SR: {sr}")
+        if archer > 0.0:
+            lora_displays.append(f"ARCHER: {archer}")
         lora_display = f" | **LoRA:** [{', '.join(lora_displays)}]" if lora_displays else ""
 
         discord_file = discord.File(image_path, filename=image_path.name)
