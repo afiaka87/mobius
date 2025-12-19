@@ -1382,6 +1382,8 @@ async def flux2_command(
     reboot_lora_scale="ReBoot LoRA weight/scale 0.0-2.0 (default: 0.8)",
     use_sr_lora="Enable the SR LoRA adapter (default: False)",
     sr_lora_scale="SR LoRA weight/scale 0.0-2.0 (default: 0.8)",
+    use_archer_lora="Enable the ARCHER LoRA adapter (default: False)",
+    archer_lora_scale="ARCHER LoRA weight/scale 0.0-2.0 (default: 0.8)",
 )
 async def z_command(
     interaction: discord.Interaction,
@@ -1404,6 +1406,8 @@ async def z_command(
     reboot_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
     use_sr_lora: bool = False,
     sr_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
+    use_archer_lora: bool = False,
+    archer_lora_scale: app_commands.Range[float, 0.0, 2.0] = 0.8,
 ) -> None:
     """Generate an image using Z-Image-Turbo."""
     await interaction.response.defer(thinking=True)
@@ -1423,6 +1427,8 @@ async def z_command(
         lora_parts.append(f"reboot={reboot_lora_scale}")
     if use_sr_lora:
         lora_parts.append(f"sr={sr_lora_scale}")
+    if use_archer_lora:
+        lora_parts.append(f"archer={archer_lora_scale}")
     lora_info = f", lora=[{', '.join(lora_parts)}]" if lora_parts else ""
     logger.info(
         f"z: User {interaction.user} requested image: "
@@ -1450,6 +1456,8 @@ async def z_command(
             reboot_lora_scale=reboot_lora_scale,
             use_sr_lora=use_sr_lora,
             sr_lora_scale=sr_lora_scale,
+            use_archer_lora=use_archer_lora,
+            archer_lora_scale=archer_lora_scale,
         )
 
         # Build LoRA display string
@@ -1468,6 +1476,8 @@ async def z_command(
             lora_displays.append(f"ReBoot: {reboot_lora_scale}")
         if use_sr_lora:
             lora_displays.append(f"SR: {sr_lora_scale}")
+        if use_archer_lora:
+            lora_displays.append(f"ARCHER: {archer_lora_scale}")
         lora_display = f" | **LoRA:** [{', '.join(lora_displays)}]" if lora_displays else ""
 
         discord_file = discord.File(image_path, filename=image_path.name)
