@@ -1441,6 +1441,8 @@ async def generate_zimage(
     reboot_lora_scale: float = 0.8,
     use_sr_lora: bool = False,
     sr_lora_scale: float = 0.8,
+    use_archer_lora: bool = False,
+    archer_lora_scale: float = 0.8,
 ) -> Path:
     """
     Generate an image using the Z-Image-Turbo API.
@@ -1465,6 +1467,8 @@ async def generate_zimage(
         reboot_lora_scale: ReBoot LoRA weight/scale 0.0-2.0 (default: 0.8)
         use_sr_lora: Enable the SR LoRA adapter (default: False)
         sr_lora_scale: SR LoRA weight/scale 0.0-2.0 (default: 0.8)
+        use_archer_lora: Enable the ARCHER LoRA adapter (default: False)
+        archer_lora_scale: ARCHER LoRA weight/scale 0.0-2.0 (default: 0.8)
 
     Returns:
         Path to the saved PNG image file
@@ -1487,6 +1491,8 @@ async def generate_zimage(
         lora_parts.append(f"reboot={reboot_lora_scale}")
     if use_sr_lora:
         lora_parts.append(f"sr={sr_lora_scale}")
+    if use_archer_lora:
+        lora_parts.append(f"archer={archer_lora_scale}")
     lora_info = f", lora=[{', '.join(lora_parts)}]" if lora_parts else ""
     logger.info(
         f"Z-Image: Generating image with prompt='{prompt[:50]}...', "
@@ -1513,6 +1519,8 @@ async def generate_zimage(
         "reboot_lora_weight": reboot_lora_scale,
         "use_sr_lora": use_sr_lora,
         "sr_lora_weight": sr_lora_scale,
+        "use_archer_lora": use_archer_lora,
+        "archer_lora_weight": archer_lora_scale,
     }
 
     try:
