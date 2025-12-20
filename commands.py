@@ -1376,6 +1376,7 @@ async def flux2_command(
     reboot="ReBoot LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
     sr="SR LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
     archer="ARCHER LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
+    cb="CB LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
 )
 async def z_command(
     interaction: discord.Interaction,
@@ -1392,6 +1393,7 @@ async def z_command(
     reboot: app_commands.Range[float, 0.0, 2.0] = 0.0,
     sr: app_commands.Range[float, 0.0, 2.0] = 0.0,
     archer: app_commands.Range[float, 0.0, 2.0] = 0.0,
+    cb: app_commands.Range[float, 0.0, 2.0] = 0.0,
 ) -> None:
     """Generate an image using Z-Image-Turbo."""
     await interaction.response.defer(thinking=True)
@@ -1413,6 +1415,8 @@ async def z_command(
         lora_parts.append(f"sr={sr}")
     if archer > 0.0:
         lora_parts.append(f"archer={archer}")
+    if cb > 0.0:
+        lora_parts.append(f"cb={cb}")
     lora_info = f", lora=[{', '.join(lora_parts)}]" if lora_parts else ""
     logger.info(
         f"z: User {interaction.user} requested image: "
@@ -1442,6 +1446,8 @@ async def z_command(
             sr_lora_scale=sr,
             use_archer_lora=archer > 0.0,
             archer_lora_scale=archer,
+            use_cb_lora=cb > 0.0,
+            cb_lora_scale=cb,
         )
 
         # Build LoRA display string
@@ -1462,6 +1468,8 @@ async def z_command(
             lora_displays.append(f"SR: {sr}")
         if archer > 0.0:
             lora_displays.append(f"ARCHER: {archer}")
+        if cb > 0.0:
+            lora_displays.append(f"CB: {cb}")
         lora_display = f" | **LoRA:** [{', '.join(lora_displays)}]" if lora_displays else ""
 
         discord_file = discord.File(image_path, filename=image_path.name)
