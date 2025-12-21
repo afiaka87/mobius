@@ -1445,6 +1445,8 @@ async def generate_zimage(
     archer_lora_scale: float = 0.8,
     use_cb_lora: bool = False,
     cb_lora_scale: float = 0.8,
+    use_rnm_lora: bool = False,
+    rnm_lora_scale: float = 0.8,
 ) -> Path:
     """
     Generate an image using the Z-Image-Turbo API.
@@ -1473,6 +1475,8 @@ async def generate_zimage(
         archer_lora_scale: ARCHER LoRA weight/scale 0.0-2.0 (default: 0.8)
         use_cb_lora: Enable the CB LoRA adapter (default: False)
         cb_lora_scale: CB LoRA weight/scale 0.0-2.0 (default: 0.8)
+        use_rnm_lora: Enable the RNM LoRA adapter (default: False)
+        rnm_lora_scale: RNM LoRA weight/scale 0.0-2.0 (default: 0.8)
 
     Returns:
         Path to the saved PNG image file
@@ -1499,6 +1503,8 @@ async def generate_zimage(
         lora_parts.append(f"archer={archer_lora_scale}")
     if use_cb_lora:
         lora_parts.append(f"cb={cb_lora_scale}")
+    if use_rnm_lora:
+        lora_parts.append(f"rnm={rnm_lora_scale}")
     lora_info = f", lora=[{', '.join(lora_parts)}]" if lora_parts else ""
     logger.info(
         f"Z-Image: Generating image with prompt='{prompt[:50]}...', "
@@ -1529,6 +1535,8 @@ async def generate_zimage(
         "archer_lora_weight": archer_lora_scale,
         "use_cb_lora": use_cb_lora,
         "cb_lora_weight": cb_lora_scale,
+        "use_rnm_lora": use_rnm_lora,
+        "rnm_lora_weight": rnm_lora_scale,
     }
 
     try:
