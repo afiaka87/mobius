@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 
 # Renamed to avoid collision with discord.ext.commands
 import commands as my_bot_commands
+from prefix_adapter import setup_prefix_commands
 
 # Load environment variables from .env file
 load_dotenv()
@@ -41,6 +42,9 @@ intents.message_content = True  # Required for commands that read message conten
 # The command_prefix is for legacy message-based commands,
 # not strictly needed for slash commands.
 bot: commands.Bot = commands.Bot(command_prefix="!", intents=intents)
+
+# Set up prefix commands (e.g., .z, .claude, .gpt)
+setup_prefix_commands(bot)
 
 
 def register_all_commands(client: commands.Bot) -> None:
