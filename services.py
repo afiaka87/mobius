@@ -1447,6 +1447,7 @@ async def generate_zimage(
     cb_lora_scale: float = 0.8,
     use_rnm_lora: bool = False,
     rnm_lora_scale: float = 0.8,
+    prompt_append: bool = False,
 ) -> Path:
     """
     Generate an image using the Z-Image-Turbo API.
@@ -1477,6 +1478,7 @@ async def generate_zimage(
         cb_lora_scale: CB LoRA weight/scale 0.0-2.0 (default: 0.8)
         use_rnm_lora: Enable the RNM LoRA adapter (default: False)
         rnm_lora_scale: RNM LoRA weight/scale 0.0-2.0 (default: 0.8)
+        prompt_append: Append style suffix to prompt based on active LoRAs (default: False)
 
     Returns:
         Path to the saved PNG image file
@@ -1537,6 +1539,7 @@ async def generate_zimage(
         "cb_lora_weight": cb_lora_scale,
         "use_rnm_lora": use_rnm_lora,
         "rnm_lora_weight": rnm_lora_scale,
+        "prompt_append": prompt_append,
     }
 
     try:
