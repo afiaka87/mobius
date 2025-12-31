@@ -1378,6 +1378,7 @@ async def flux2_command(
     archer="ARCHER LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
     cb="CB LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
     rnm="RNM LoRA scale (0.0=disabled, 0.1-2.0=enabled)",
+    prompt_append="Auto-append style suffix based on active LoRAs",
 )
 async def z_command(
     interaction: discord.Interaction,
@@ -1396,6 +1397,7 @@ async def z_command(
     archer: app_commands.Range[float, 0.0, 2.0] = 0.0,
     cb: app_commands.Range[float, 0.0, 2.0] = 0.0,
     rnm: app_commands.Range[float, 0.0, 2.0] = 0.0,
+    prompt_append: bool = False,
 ) -> None:
     """Generate an image using Z-Image-Turbo."""
     await interaction.response.defer(thinking=True)
@@ -1454,6 +1456,7 @@ async def z_command(
             cb_lora_scale=cb,
             use_rnm_lora=rnm > 0.0,
             rnm_lora_scale=rnm,
+            prompt_append=prompt_append,
         )
 
         # Build LoRA display string
@@ -1479,11 +1482,12 @@ async def z_command(
         if rnm > 0.0:
             lora_displays.append(f"RNM: {rnm}")
         lora_display = f" | **LoRA:** [{', '.join(lora_displays)}]" if lora_displays else ""
+        prompt_append_display = " | **Prompt Append:** On" if prompt_append else ""
 
         discord_file = discord.File(image_path, filename=image_path.name)
         result_content = (
             f"**Prompt:** {prompt}\n"
-            f"**Size:** {width}x{height} | **Steps:** {num_inference_steps} | **Seed:** {seed}{lora_display}"
+            f"**Size:** {width}x{height} | **Steps:** {num_inference_steps} | **Seed:** {seed}{lora_display}{prompt_append_display}"
         )
         await interaction.followup.send(content=result_content, file=discord_file)
     except RuntimeError as re:
