@@ -1650,7 +1650,18 @@ async def generate_ltx_video(prompt: str) -> Path:
 
             # Extract video output info
             outputs = history[prompt_id]["outputs"]
-            video_info = outputs["75"]["videos"][0]
+            node_output = outputs["75"]
+            logger.info(f"LTX-2: Node 75 output keys: {list(node_output.keys())}")
+
+            # SaveVideo outputs under "images" with "animated": [true]
+            video_list = node_output.get("images")
+            if not video_list:
+                logger.error(f"LTX-2: No video data in node 75 output: {node_output}")
+                raise RuntimeError(
+                    f"ComfyUI SaveVideo node returned no video data. "
+                    f"Available keys: {list(node_output.keys())}"
+                )
+            video_info = video_list[0]
             filename = video_info["filename"]
             subfolder = video_info.get("subfolder", "")
             vtype = video_info.get("type", "output")
