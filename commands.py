@@ -1496,3 +1496,89 @@ async def z_command(
     except Exception as e:
         logger.exception(f"z: Unexpected error - {e}")
         await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}", ephemeral=True)
+
+
+# --- LTX-2 Text-to-Video Command ---
+
+
+@app_commands.command(name="ltx", description="Generate a video using LTX-2 via ComfyUI")
+@app_commands.describe(text="Text description of the video to generate")
+async def ltx_command(interaction: discord.Interaction, text: str) -> None:
+    """Generate a video using LTX-2 text-to-video via ComfyUI."""
+    await interaction.response.defer(thinking=True)
+
+    logger.info(f"ltx: User {interaction.user} requested video: prompt='{text[:80]}'")
+
+    # Keepalive task to prevent Discord interaction token from expiring
+    keepalive_task: asyncio.Task[None] | None = None
+    last_keepalive_msg: discord.Message | None = None
+
+    async def keepalive_loop() -> None:
+        nonlocal last_keepalive_msg
+        while True:
+            await asyncio.sleep(540)  # 9 minutes
+            try:
+                if last_keepalive_msg:
+                    try:
+                        await last_keepalive_msg.delete()
+                    except discord.HTTPException:
+                        pass
+                last_keepalive_msg = await interaction.followup.send(
+                    "⏳ Still generating your LTX-2 video...",
+                    ephemeral=True,
+                    wait=True,
+                )
+                logger.info("ltx: Sent keepalive followup")
+            except discord.HTTPException as e:
+                logger.warning(f"ltx: Could not send keepalive: {e}")
+
+    try:
+        await interaction.edit_original_response(
+            content=f"🎬 **Generating video with LTX-2...**\n"
+            f"**Prompt:** {discord.utils.escape_markdown(text[:200])}\n"
+            f"⏳ Submitted to ComfyUI — this may take up to 20 minutes."
+        )
+
+        keepalive_task = asyncio.create_task(keepalive_loop())
+
+        start_time = time.time()
+        video_path = await services.generate_ltx_video(prompt=text)
+        total_time = time.time() - start_time
+        mins, secs = divmod(int(total_time), 60)
+
+        # Clean up keepalive
+        keepalive_task.cancel()
+        if last_keepalive_msg:
+            try:
+                await last_keepalive_msg.delete()
+            except discord.HTTPException:
+                pass
+
+        discord_file = discord.File(video_path, filename=video_path.name)
+        final_message = (
+            f"✅ **LTX-2 video complete!** (Took {mins}m {secs}s)\n"
+            f"**Prompt:** {discord.utils.escape_markdown(text)}"
+        )
+
+        try:
+            await interaction.edit_original_response(
+                content=final_message, attachments=[discord_file]
+            )
+        except discord.HTTPException as e:
+            if e.code == 50027:  # Interaction token expired
+                logger.info("ltx: Interaction expired, sending to channel instead")
+                channel = interaction.channel
+                if channel is not None and hasattr(channel, "send"):
+                    await channel.send(content=final_message, file=discord_file)  # type: ignore[union-attr]
+            else:
+                raise
+
+    except RuntimeError as re:
+        logger.exception(f"ltx: Runtime error - {re}")
+        await interaction.followup.send(f"❌ Error generating video: {re}")
+    except Exception as e:
+        logger.exception(f"ltx: Unexpected error: {e}")
+        await interaction.followup.send(f"❌ An unexpected error occurred: {e!s}")
+    finally:
+        if keepalive_task and not keepalive_task.done():
+            keepalive_task.cancel()

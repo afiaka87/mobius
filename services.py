@@ -10,8 +10,11 @@ like chat completions, image generation, speech synthesis, and data retrieval.
 
 import asyncio
 import base64
+import copy
+import json
 import logging
 import os
+import random
 from collections.abc import Sequence
 from io import BytesIO
 from pathlib import Path
@@ -751,6 +754,7 @@ else:
 K5_API_URL = "http://100.105.155.18:8888"
 SD_API_URL = "http://100.70.95.57:8889"
 ZIMAGE_API_URL = "https://archest.tailfd5df.ts.net"
+COMFYUI_URL = os.getenv("COMFYUI_API_URL", "http://100.105.155.18:8188").rstrip("/")
 
 
 # --- Kandinsky-5 Video Generation Services ---
@@ -1570,3 +1574,120 @@ async def generate_zimage(
     except Exception as e:
         logger.exception(f"Error generating Z-Image: {e}")
         raise RuntimeError(f"Failed to generate Z-Image: {e!s}")
+
+
+# --- ComfyUI LTX-2 Text-to-Video ---
+
+
+async def generate_ltx_video(prompt: str) -> Path:
+    """
+    Generate a video using the LTX-2 model via ComfyUI API.
+
+    Loads the LTX-2 text-to-video workflow, injects the user prompt and random
+    seeds, submits it to ComfyUI, polls for completion, and downloads the result.
+
+    Args:
+        prompt: Text description of the video to generate
+
+    Returns:
+        Path to the saved MP4 video file
+
+    Raises:
+        RuntimeError: If ComfyUI is unreachable, times out, or returns an error
+    """
+    # Load and configure workflow
+    workflow_path = Path(__file__).parent / "workflows" / "ltx2_t2v.json"
+    with open(workflow_path) as f:
+        workflow = json.load(f)
+    workflow = copy.deepcopy(workflow)
+
+    # Set prompt text
+    workflow["92:3"]["inputs"]["text"] = prompt
+
+    # Randomize noise seeds
+    seed1 = random.randint(0, 2**32 - 1)
+    seed2 = random.randint(0, 2**32 - 1)
+    workflow["92:11"]["inputs"]["noise_seed"] = seed1
+    workflow["92:67"]["inputs"]["noise_seed"] = seed2
+
+    logger.info(
+        f"LTX-2: Submitting workflow with prompt='{prompt[:80]}', "
+        f"seeds=({seed1}, {seed2})"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Submit prompt
+            resp = await client.post(
+                f"{COMFYUI_URL}/prompt",
+                json={"prompt": workflow},
+            )
+            resp.raise_for_status()
+            prompt_id: str = resp.json()["prompt_id"]
+            logger.info(f"LTX-2: Queued as prompt_id={prompt_id}")
+
+        # Poll for completion (max 20 minutes)
+        max_wait = 20 * 60
+        poll_interval = 10
+        elapsed = 0
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            while elapsed < max_wait:
+                await asyncio.sleep(poll_interval)
+                elapsed += poll_interval
+
+                hist_resp = await client.get(f"{COMFYUI_URL}/history/{prompt_id}")
+                hist_resp.raise_for_status()
+                history = hist_resp.json()
+
+                if prompt_id in history:
+                    logger.info(f"LTX-2: Completed after ~{elapsed}s")
+                    break
+            else:
+                raise RuntimeError(
+                    f"LTX-2 generation timed out after {max_wait // 60} minutes"
+                )
+
+            # Extract video output info
+            outputs = history[prompt_id]["outputs"]
+            video_info = outputs["75"]["videos"][0]
+            filename = video_info["filename"]
+            subfolder = video_info.get("subfolder", "")
+            vtype = video_info.get("type", "output")
+
+            # Download the video
+            dl_resp = await client.get(
+                f"{COMFYUI_URL}/view",
+                params={
+                    "filename": filename,
+                    "subfolder": subfolder,
+                    "type": vtype,
+                },
+                timeout=120.0,
+            )
+            dl_resp.raise_for_status()
+
+        # Save to cache
+        cache_dir = Path(".cache/ltx_generated")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        safe_prompt = "".join(c if c.isalnum() else "_" for c in prompt[:40])
+        file_path = cache_dir / f"ltx2_{safe_prompt}.mp4"
+
+        with open(file_path, "wb") as f:
+            f.write(dl_resp.content)
+
+        logger.info(f"LTX-2: Video saved to {file_path} ({len(dl_resp.content)} bytes)")
+        return file_path
+
+    except httpx.ConnectError:
+        logger.exception(f"Cannot connect to ComfyUI at {COMFYUI_URL}")
+        raise RuntimeError(
+            f"Cannot connect to ComfyUI at {COMFYUI_URL}. Please check if it's running."
+        )
+    except httpx.HTTPStatusError as e:
+        logger.exception(f"ComfyUI HTTP error: {e.response.status_code}")
+        raise RuntimeError(f"ComfyUI API error: {e.response.status_code}")
+    except KeyError as e:
+        logger.exception(f"LTX-2: Unexpected response structure: missing key {e}")
+        raise RuntimeError(f"ComfyUI returned unexpected data (missing key: {e})")
